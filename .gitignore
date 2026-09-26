@@ -6,9 +6,10 @@ env/
 .DS_Store
 Thumbs.db
 
-# Frontend dependencies
+# Frontend dependencies / TypeScript incremental build cache
 node_modules/
 frontend/node_modules/
+*.tsbuildinfo
 
 # Data
 test_data/

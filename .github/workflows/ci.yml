@@ -64,11 +64,6 @@ jobs:
           --health-timeout 5s
           --health-retries 20
           --health-start-period 20s
-    env:
-      SQL_SERVER: localhost,1433
-      SQL_DB: Benchmarking
-      SQL_UID: sa
-      SQL_DRIVER: ODBC Driver 18 for SQL Server
     steps:
       - uses: actions/checkout@v4
 
@@ -93,8 +88,14 @@ jobs:
         run: pip install -r requirements.txt -r requirements-dev.txt
 
       - name: Apply schema, procedures and seed
+        env:
+          SQL_SERVER: localhost,1433
+          SQL_DB: Benchmarking
+          SQL_UID: sa
         run: bash database/docker/apply_schema.sh
 
+      # Keep SQL_* out of this step: unit tests build IngestionConfig from kwargs and
+      # must not inherit CI SQL auth env (pydantic-settings still reads the process env).
       - name: Unit and characterization tests
         run: pytest -m "not integration" --cov=ingestion_engine --cov-report=term-missing
 
@@ -103,6 +104,10 @@ jobs:
           RUN_SQL_INTEGRATION: "1"
           SQL_SCHEMA_APPLIED: "1"
           SQL_INTEGRATION_STRICT: "1"
+          SQL_SERVER: localhost,1433
+          SQL_DB: Benchmarking
+          SQL_UID: sa
+          SQL_DRIVER: ODBC Driver 18 for SQL Server
         run: pytest -m integration -v
 
   frontend:
