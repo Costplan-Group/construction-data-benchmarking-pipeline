@@ -1,16 +1,18 @@
 import json
-import os
 from copy import deepcopy
-from datetime import date
-from datetime import datetime, timezone
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
 from fastapi import HTTPException
-from groq import Groq
 
+from backend.app.core.paths import get_saved_drafts_dir
+from backend.app.core.settings import get_settings
+from backend.app.reporting.branding import get_brand_profile
+from backend.app.services.llm import LLMClient, get_llm_client
 from ingestion_engine import excel_file_ingestion as ingestion
+from ingestion_engine.connection import get_connection, module_db
 
 """
 This service is responsible for generating AI-driven report drafts from ingested project and tender data.
@@ -35,11 +37,9 @@ Returns a final draft (draft_sections + report_context) that the frontend can di
 """
 
 REPORT_TEMPLATE_PATH = (
-    Path(__file__).resolve().parent.parent
-    / "reporting"
-    / "report_context_template.json"
+    Path(__file__).resolve().parent.parent / "reporting" / "report_context_template.json"
 )
-SAVED_DRAFTS_DIR = Path(__file__).resolve().parent.parent / "reporting" / "saved_drafts"
+
 
 # load the baseline report-context JSON template used by AI report generation.
 def load_report_context_template() -> dict[str, Any]:
@@ -49,12 +49,6 @@ def load_report_context_template() -> dict[str, Any]:
     with REPORT_TEMPLATE_PATH.open("r", encoding="utf-8") as fp:
         return json.load(fp)
 
-
-def _get_groq_client() -> Groq:
-    api_key = os.getenv("GROQ_API_KEY", "").strip()
-    if not api_key:
-        raise HTTPException(status_code=500, detail="GROQ_API_KEY is not configured.")
-    return Groq(api_key=api_key)
 
 # helper function to resolve the load_batch_id from the project_id.
 def _resolve_load_batch_id_from_project_id(project_id: str) -> str:
@@ -67,7 +61,7 @@ def _resolve_load_batch_id_from_project_id(project_id: str) -> str:
         WHERE LTRIM(RTRIM(ISNULL(pi.ProjectID, ''))) = ?
         ORDER BY lb.CreatedAt DESC
     """
-    rows = ingestion.fetch_all(sql, (project_id.strip(),))
+    rows = module_db(connection_factory=get_connection).fetch_all(sql, (project_id.strip(),))
     if not rows:
         raise HTTPException(
             status_code=404,
@@ -91,7 +85,7 @@ def _fetch_project_information(load_batch_id: str) -> dict[str, Any] | None:
         WHERE LoadBatchID = ?
         ORDER BY RowNum ASC
     """
-    rows = ingestion.fetch_all(sql, (load_batch_id,))
+    rows = module_db(connection_factory=get_connection).fetch_all(sql, (load_batch_id,))
     return rows[0] if rows else None
 
 
@@ -111,7 +105,9 @@ def _fetch_tenderers_from_project_information(load_batch_id: str) -> list[str]:
     """
     rows = []
     try:
-        rows = ingestion.fetch_all(sql_tenderers, (load_batch_id,))
+        rows = module_db(connection_factory=get_connection).fetch_all(
+            sql_tenderers, (load_batch_id,)
+        )
     except Exception:
         rows = []
 
@@ -124,7 +120,7 @@ def _fetch_tenderers_from_project_information(load_batch_id: str) -> list[str]:
           AND LTRIM(RTRIM(ISNULL(SelectedContractor, ''))) <> ''
         ORDER BY RowNum ASC
     """
-        rows = ingestion.fetch_all(sql, (load_batch_id,))
+        rows = module_db(connection_factory=get_connection).fetch_all(sql, (load_batch_id,))
 
     seen: set[str] = set()
     tenderers: list[str] = []
@@ -133,8 +129,7 @@ def _fetch_tenderers_from_project_information(load_batch_id: str) -> list[str]:
         raw_value = str(
             row.get("TendererName")
             if row.get("TendererName") is not None
-            else row.get("SelectedContractor")
-            or ""
+            else row.get("SelectedContractor") or ""
         )
         for part in raw_value.split(","):
             name = part.strip()
@@ -157,7 +152,7 @@ def _fetch_tenderer_review_rows(load_batch_id: str) -> list[dict[str, Any]]:
         SELECT
             TendererName,
             FinalAdjustedTenderSum,
-            VarianceToCostplan,
+            VarianceToBudget,
             ConstructionBudget,
             IsSelected
         FROM stg.ProjectTenderer
@@ -165,10 +160,28 @@ def _fetch_tenderer_review_rows(load_batch_id: str) -> list[dict[str, Any]]:
         ORDER BY RowNum ASC, StageProjectTendererID ASC
     """
     try:
-        rows = ingestion.fetch_all(sql, (load_batch_id,))
+        rows = module_db(connection_factory=get_connection).fetch_all(sql, (load_batch_id,))
         return rows if isinstance(rows, list) else []
     except Exception:
-        return []
+        # Older DBs may still expose VarianceToCostplan.
+        sql_legacy = """
+            SELECT
+                TendererName,
+                FinalAdjustedTenderSum,
+                VarianceToCostplan AS VarianceToBudget,
+                ConstructionBudget,
+                IsSelected
+            FROM stg.ProjectTenderer
+            WHERE LoadBatchID = ?
+            ORDER BY RowNum ASC, StageProjectTendererID ASC
+        """
+        try:
+            rows = module_db(connection_factory=get_connection).fetch_all(
+                sql_legacy, (load_batch_id,)
+            )
+            return rows if isinstance(rows, list) else []
+        except Exception:
+            return []
 
 
 def _fetch_level2_rows(load_batch_id: str) -> list[dict[str, Any]]:
@@ -182,7 +195,7 @@ def _fetch_level2_rows(load_batch_id: str) -> list[dict[str, Any]]:
         WHERE LoadBatchID = ?
         ORDER BY RowNum ASC
     """
-    return ingestion.fetch_all(sql, (load_batch_id,))
+    return module_db(connection_factory=get_connection).fetch_all(sql, (load_batch_id,))
 
 
 def _fetch_adjustments(load_batch_id: str) -> list[dict[str, Any]]:
@@ -196,7 +209,7 @@ def _fetch_adjustments(load_batch_id: str) -> list[dict[str, Any]]:
         ORDER BY RowNum ASC
     """
     try:
-        return ingestion.fetch_all(sql, (load_batch_id,))
+        return module_db(connection_factory=get_connection).fetch_all(sql, (load_batch_id,))
     except Exception:
         # Adjustments staging may not be deployed yet in some environments.
         return []
@@ -222,8 +235,12 @@ def _populate_context_from_staging(
     adjustment_rows: list[dict[str, Any]],
 ) -> None:
     if project_row:
-        context["project"]["project_id"] = project_row.get("ProjectID") or context["project"]["project_id"]
-        context["project"]["project_name"] = project_row.get("ProjectName") or context["project"]["project_name"]
+        context["project"]["project_id"] = (
+            project_row.get("ProjectID") or context["project"]["project_id"]
+        )
+        context["project"]["project_name"] = (
+            project_row.get("ProjectName") or context["project"]["project_name"]
+        )
         context["project"]["project_description"] = project_row.get("Notes") or ""
         context["project"]["location"] = project_row.get("LocationLabel") or ""
 
@@ -298,7 +315,7 @@ def _populate_context_from_staging(
         if not contractor_name:
             continue
         final_adjusted = _as_float(row.get("FinalAdjustedTenderSum"))
-        variance_to_costplan = _as_float(row.get("VarianceToCostplan"))
+        variance_to_budget = _as_float(row.get("VarianceToBudget", row.get("VarianceToCostplan")))
         construction_budget = _as_float(row.get("ConstructionBudget"))
         if construction_budget_from_summary is None and construction_budget:
             construction_budget_from_summary = construction_budget
@@ -309,12 +326,14 @@ def _populate_context_from_staging(
                 "fixed_adjustments": 0.0,
                 "risk_adjustments": 0.0,
                 "final_adjusted_tender_sum": final_adjusted,
-                "variance_to_construction_budget": variance_to_costplan,
+                "variance_to_construction_budget": variance_to_budget,
             }
         )
 
     context["commercial"]["construction_budget"] = (
-        construction_budget_from_summary if construction_budget_from_summary is not None else total_cost_sum
+        construction_budget_from_summary
+        if construction_budget_from_summary is not None
+        else total_cost_sum
     )
     context["commercial"]["tender_comparison"] = (
         tender_comparison_rows
@@ -325,7 +344,9 @@ def _populate_context_from_staging(
                 "initial_tender_sum": total_cost_sum,
                 "fixed_adjustments": fixed_adjustments_sum,
                 "risk_adjustments": risk_adjustments_sum,
-                "final_adjusted_tender_sum": total_cost_sum + fixed_adjustments_sum + risk_adjustments_sum,
+                "final_adjusted_tender_sum": total_cost_sum
+                + fixed_adjustments_sum
+                + risk_adjustments_sum,
                 "variance_to_construction_budget": 0.0,
             }
         ]
@@ -356,7 +377,9 @@ def _build_draft_sections(context: dict[str, Any]) -> dict[str, Any]:
         tenderers = []
 
     tender_comparison = commercial.get("tender_comparison", [])
-    top_row = tender_comparison[0] if isinstance(tender_comparison, list) and tender_comparison else {}
+    top_row = (
+        tender_comparison[0] if isinstance(tender_comparison, list) and tender_comparison else {}
+    )
     final_sum = _as_float(top_row.get("final_adjusted_tender_sum"))
     fixed_adj = _as_float(top_row.get("fixed_adjustments"))
     risk_adj = _as_float(top_row.get("risk_adjustments"))
@@ -385,7 +408,7 @@ def _build_draft_sections(context: dict[str, Any]) -> dict[str, Any]:
         "QS should review provisional sums and any excluded adjustments before final issue."
     )
     introduction_fallback = (
-        f"This report has been prepared by Costplan Services (South East) Ltd for {project_name} "
+        f"This report has been prepared by {get_brand_profile().company_name} for {project_name} "
         f"{'in ' + location if location else ''}. "
         "The report has been produced to outline the tender process."
     )
@@ -425,7 +448,7 @@ def _build_draft_sections(context: dict[str, Any]) -> dict[str, Any]:
         section_name="Introduction",
         writing_brief=(
             "Write an introduction paragraph starting with: "
-            "'This report has been prepared by Costplan Services (South East) Ltd'. "
+            f"'This report has been prepared by {get_brand_profile().company_name}'. "
             "Reference the project and location. "
             "Do not mention tenderer names or list contractors. "
             "Finish by stating that the report has been produced to outline the tender process."
@@ -484,13 +507,14 @@ def _generate_groq_recommendation(
     fixed_adj: float,
     risk_adj: float,
     budget_total: float,
+    llm: LLMClient | None = None,
 ) -> str:
     fallback = (
         f"We recommend appointing {selected_contractor} as preferred contractor for {project_name} "
         "subject to final commercial clarifications and client approval."
     )
     try:
-        client = _get_groq_client()
+        client = llm or get_llm_client()
     except Exception:
         return fallback
 
@@ -505,15 +529,16 @@ def _generate_groq_recommendation(
         "Use the commercial context qualitatively without citing figures.\n"
     )
     try:
-        completion = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=[
-                {"role": "system", "content": "You are an expert quantity surveying report writer."},
+        content = client.complete(
+            [
+                {
+                    "role": "system",
+                    "content": "You are an expert quantity surveying report writer.",
+                },
                 {"role": "user", "content": prompt},
             ],
-            temperature=0.2,
+            temperature=get_settings().groq_temperature_narrative,
         )
-        content = (completion.choices[0].message.content or "").strip()
         if not content:
             return fallback
         return content
@@ -526,9 +551,10 @@ def _generate_groq_section_text(
     writing_brief: str,
     deterministic_facts: dict[str, Any],
     fallback: str,
+    llm: LLMClient | None = None,
 ) -> str:
     try:
-        client = _get_groq_client()
+        client = llm or get_llm_client()
     except Exception:
         return fallback
 
@@ -544,15 +570,16 @@ def _generate_groq_section_text(
         f"Facts:\n{json.dumps(deterministic_facts, ensure_ascii=True)}\n"
     )
     try:
-        completion = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=[
-                {"role": "system", "content": "You are an expert quantity surveying report writer."},
+        content = client.complete(
+            [
+                {
+                    "role": "system",
+                    "content": "You are an expert quantity surveying report writer.",
+                },
                 {"role": "user", "content": prompt},
             ],
-            temperature=0.2,
+            temperature=get_settings().groq_temperature_narrative,
         )
-        content = (completion.choices[0].message.content or "").strip()
         if not content:
             return fallback
         return content
@@ -563,16 +590,17 @@ def _generate_groq_section_text(
 def _generate_groq_next_steps(
     deterministic_facts: dict[str, Any],
     fallback: list[str],
+    llm: LLMClient | None = None,
 ) -> list[str]:
     try:
-        client = _get_groq_client()
+        client = llm or get_llm_client()
     except Exception:
         return fallback
 
     prompt = (
         "Produce exactly 5 concise recommended next steps for a client-facing tender report.\n"
         "Rules:\n"
-        "1. Return JSON only in this exact format: {\"next_steps\": [\"...\", \"...\"]}\n"
+        '1. Return JSON only in this exact format: {"next_steps": ["...", "..."]}\n'
         "2. Each step must be action-oriented and commercially practical.\n"
         "3. Do not mention SQL, staging tables, or AI.\n"
         "4. Do not mention internal identifiers such as Project ID.\n"
@@ -580,20 +608,26 @@ def _generate_groq_next_steps(
         f"Facts:\n{json.dumps(deterministic_facts, ensure_ascii=True)}\n"
     )
     try:
-        completion = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=[
-                {"role": "system", "content": "You are an expert quantity surveying report writer."},
+        content = client.complete(
+            [
+                {
+                    "role": "system",
+                    "content": "You are an expert quantity surveying report writer.",
+                },
                 {"role": "user", "content": prompt},
             ],
-            temperature=0.2,
+            temperature=get_settings().groq_temperature_narrative,
         )
-        content = (completion.choices[0].message.content or "").strip()
         if not content:
             return fallback
-        # Remove fenced wrappers if present.
         if content.startswith("```"):
-            content = content.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+            content = (
+                content.strip()
+                .removeprefix("```json")
+                .removeprefix("```")
+                .removesuffix("```")
+                .strip()
+            )
         parsed = json.loads(content)
         items = parsed.get("next_steps") if isinstance(parsed, dict) else None
         if not isinstance(items, list):
@@ -632,7 +666,7 @@ def _normalize_client_wording(draft_sections: dict[str, Any]) -> dict[str, Any]:
 
 def _saved_draft_path(load_batch_id: str) -> Path:
     safe_name = load_batch_id.replace("/", "_").replace("\\", "_")
-    return SAVED_DRAFTS_DIR / f"{safe_name}.json"
+    return get_saved_drafts_dir() / f"{safe_name}.json"
 
 
 def load_saved_draft(load_batch_id: str) -> dict[str, Any] | None:
@@ -655,13 +689,14 @@ def save_report_draft_state(
 ) -> dict[str, Any]:
     if not load_batch_id.strip():
         raise HTTPException(status_code=400, detail="load_batch_id is required.")
-    SAVED_DRAFTS_DIR.mkdir(parents=True, exist_ok=True)
+    drafts_dir = get_saved_drafts_dir()
+    drafts_dir.mkdir(parents=True, exist_ok=True)
     payload = {
         "project_id": project_id,
         "load_batch_id": load_batch_id,
         "source_file_name": source_file_name,
         "draft_sections": draft_sections,
-        "saved_at_utc": datetime.now(timezone.utc).isoformat(),
+        "saved_at_utc": datetime.now(UTC).isoformat(),
     }
     path = _saved_draft_path(load_batch_id)
     with path.open("w", encoding="utf-8") as fp:
@@ -698,7 +733,7 @@ def build_report_draft(
     source_file_name = batch_summary.get("SourceFileName") or ""
     context["audit"]["load_batch_id"] = load_batch_id_clean
     context["audit"]["source_file_name"] = source_file_name
-    context["audit"]["generated_at_utc"] = datetime.now(timezone.utc).isoformat()
+    context["audit"]["generated_at_utc"] = datetime.now(UTC).isoformat()
     context["project"]["project_id"] = project_id_clean
 
     project_row = _fetch_project_information(load_batch_id_clean)
@@ -737,4 +772,3 @@ def build_report_draft(
         "draft_sections": draft_sections,
         "report_context": _coerce_value(context),
     }
-

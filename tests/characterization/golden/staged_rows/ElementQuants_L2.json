@@ -1,0 +1,62 @@
+[
+  {
+    "Comment": null,
+    "L2Code": "1.1",
+    "L2Name": "Foundations",
+    "LoadBatchID": "00000000-0000-0000-0000-000000000001",
+    "Qty": "1200",
+    "RowNum": 2,
+    "SourceFileName": "DEMO_Tender_Comparison_Workbook.xlsx",
+    "Unit": "m2"
+  },
+  {
+    "Comment": "Not applicable",
+    "L2Code": "1.2",
+    "L2Name": "Basement Excavation",
+    "LoadBatchID": "00000000-0000-0000-0000-000000000001",
+    "Qty": "0",
+    "RowNum": 3,
+    "SourceFileName": "DEMO_Tender_Comparison_Workbook.xlsx",
+    "Unit": "m3"
+  },
+  {
+    "Comment": null,
+    "L2Code": "2.1",
+    "L2Name": "Frame",
+    "LoadBatchID": "00000000-0000-0000-0000-000000000001",
+    "Qty": "4250",
+    "RowNum": 4,
+    "SourceFileName": "DEMO_Tender_Comparison_Workbook.xlsx",
+    "Unit": "m2"
+  },
+  {
+    "Comment": null,
+    "L2Code": "2.2",
+    "L2Name": "Upper Floors",
+    "LoadBatchID": "00000000-0000-0000-0000-000000000001",
+    "Qty": "2800",
+    "RowNum": 5,
+    "SourceFileName": "DEMO_Tender_Comparison_Workbook.xlsx",
+    "Unit": "m2"
+  },
+  {
+    "Comment": null,
+    "L2Code": "3.1",
+    "L2Name": "External Walls",
+    "LoadBatchID": "00000000-0000-0000-0000-000000000001",
+    "Qty": "2100",
+    "RowNum": 6,
+    "SourceFileName": "DEMO_Tender_Comparison_Workbook.xlsx",
+    "Unit": "m2"
+  },
+  {
+    "Comment": null,
+    "L2Code": "4.1",
+    "L2Name": "Roof",
+    "LoadBatchID": "00000000-0000-0000-0000-000000000001",
+    "Qty": "1450",
+    "RowNum": 7,
+    "SourceFileName": "DEMO_Tender_Comparison_Workbook.xlsx",
+    "Unit": "m2"
+  }
+]

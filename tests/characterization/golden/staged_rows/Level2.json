@@ -1,0 +1,68 @@
+[
+  {
+    "L1Code": "1",
+    "L1Name": "Substructure",
+    "L2Code": "1.1",
+    "L2Name": "Foundations",
+    "LoadBatchID": "00000000-0000-0000-0000-000000000001",
+    "Rate": "450.0",
+    "RowNum": 3,
+    "SourceFileName": "DEMO_Tender_Comparison_Workbook.xlsx",
+    "TotalCost": "540000.0"
+  },
+  {
+    "L1Code": "1",
+    "L1Name": "Substructure",
+    "L2Code": "1.2",
+    "L2Name": "Basement Excavation",
+    "LoadBatchID": "00000000-0000-0000-0000-000000000001",
+    "Rate": "0.0",
+    "RowNum": 4,
+    "SourceFileName": "DEMO_Tender_Comparison_Workbook.xlsx",
+    "TotalCost": "0.0"
+  },
+  {
+    "L1Code": "2",
+    "L1Name": "Superstructure",
+    "L2Code": "2.1",
+    "L2Name": "Frame",
+    "LoadBatchID": "00000000-0000-0000-0000-000000000001",
+    "Rate": "320.0",
+    "RowNum": 6,
+    "SourceFileName": "DEMO_Tender_Comparison_Workbook.xlsx",
+    "TotalCost": "1360000.0"
+  },
+  {
+    "L1Code": "2",
+    "L1Name": "Superstructure",
+    "L2Code": "2.2",
+    "L2Name": "Upper Floors",
+    "LoadBatchID": "00000000-0000-0000-0000-000000000001",
+    "Rate": "185.0",
+    "RowNum": 7,
+    "SourceFileName": "DEMO_Tender_Comparison_Workbook.xlsx",
+    "TotalCost": "518000.0"
+  },
+  {
+    "L1Code": "3",
+    "L1Name": "Internal Finishes",
+    "L2Code": "3.1",
+    "L2Name": "External Walls",
+    "LoadBatchID": "00000000-0000-0000-0000-000000000001",
+    "Rate": "210.0",
+    "RowNum": 9,
+    "SourceFileName": "DEMO_Tender_Comparison_Workbook.xlsx",
+    "TotalCost": "441000.0"
+  },
+  {
+    "L1Code": "4",
+    "L1Name": "Roof",
+    "L2Code": "4.1",
+    "L2Name": "Roof Coverings",
+    "LoadBatchID": "00000000-0000-0000-0000-000000000001",
+    "Rate": "275.0",
+    "RowNum": 11,
+    "SourceFileName": "DEMO_Tender_Comparison_Workbook.xlsx",
+    "TotalCost": "398750.0"
+  }
+]

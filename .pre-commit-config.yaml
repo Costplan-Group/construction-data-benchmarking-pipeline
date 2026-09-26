@@ -1,0 +1,28 @@
+# See https://pre-commit.com
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.9
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: local
+    hooks:
+      - id: mypy
+        name: mypy
+        entry: mypy
+        language: python
+        types: [python]
+        pass_filenames: false
+        additional_dependencies:
+          - mypy==2.3.1
+          - types-PyYAML==6.0.12.20260906
+          - pydantic==2.13.1
+          - pydantic-settings==2.15.0
+        args: [--config-file=pyproject.toml]
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.24.2
+    hooks:
+      - id: gitleaks

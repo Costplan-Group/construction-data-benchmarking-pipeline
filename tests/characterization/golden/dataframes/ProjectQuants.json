@@ -1,0 +1,30 @@
+[
+  {
+    "Comment": "Gross internal floor area",
+    "ProjectQuantCode": "PQ-001",
+    "ProjectQuantName": "GIFA",
+    "Qty": 4250,
+    "Unit": "m2"
+  },
+  {
+    "Comment": "NaN",
+    "ProjectQuantCode": "PQ-002",
+    "ProjectQuantName": "Site Area",
+    "Qty": 11800,
+    "Unit": "m2"
+  },
+  {
+    "Comment": "NaN",
+    "ProjectQuantCode": "PQ-003",
+    "ProjectQuantName": "Parking Spaces",
+    "Qty": 42,
+    "Unit": "nr"
+  },
+  {
+    "Comment": "Above ground",
+    "ProjectQuantCode": "PQ-004",
+    "ProjectQuantName": "Storeys",
+    "Qty": 3,
+    "Unit": "nr"
+  }
+]

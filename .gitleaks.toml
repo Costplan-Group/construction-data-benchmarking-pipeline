@@ -1,0 +1,8 @@
+# Extend default gitleaks rules.
+# Prefer keeping secrets in .env (gitignored), not allowlisting them here.
+# https://github.com/gitleaks/gitleaks
+
+title = "benchmarking_poc"
+
+[extend]
+useDefault = true

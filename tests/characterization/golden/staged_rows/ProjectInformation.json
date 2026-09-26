@@ -1,0 +1,30 @@
+[
+  {
+    "Asbestos": 0,
+    "BaseDate": "2025-06-01",
+    "Basement": 0,
+    "BudgetStage": "Pre-Contract",
+    "ClientName": "Northbridge Education Trust",
+    "Contamination": 0,
+    "CostStage": "Tender",
+    "Currency": "GBP",
+    "DataStatus": "Draft",
+    "Demolition": 0,
+    "GIFA": "4250",
+    "HorizontalExtension": 1,
+    "LoadBatchID": "00000000-0000-0000-0000-000000000001",
+    "LocationLabel": "North West",
+    "NewBuild": 1,
+    "Notes": "Fictional sample project for ingestion tests and Stage B demo. SUMMARY first metric pair is Costplan; variance = tender \u2212 Costplan.",
+    "ProgrammeLengthInWeeks": 78,
+    "ProgrammeType": "Traditional",
+    "ProjectID": "DEMO-001",
+    "ProjectName": "Riverside Learning Centre Extension",
+    "Refurbishment": 0,
+    "RowNum": 2,
+    "SectorCode": "Education",
+    "SelectedContractor": "Apex Build Ltd",
+    "SourceFileName": "DEMO_Tender_Comparison_Workbook.xlsx",
+    "VerticalExtension": 0
+  }
+]

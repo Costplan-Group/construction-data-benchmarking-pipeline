@@ -1,0 +1,105 @@
+[project]
+name = "cost-benchmarking-poc"
+version = "0.1.0"
+description = "Cost benchmarking POC — FastAPI backend, Excel ingestion, AI report exports"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi==0.135.3",
+    "uvicorn[standard]==0.44.0",
+    "pydantic==2.13.1",
+    "pydantic-settings==2.15.0",
+    "python-multipart==0.0.26",
+    "pandas==3.0.2",
+    "pyodbc==5.3.0",
+    "python-dotenv==1.2.2",
+    "openpyxl==3.1.5",
+    "pyyaml==6.0.3",
+    "groq==1.2.0",
+    "docxtpl==0.20.2",
+    "python-docx==1.2.0",
+    "jinja2==3.1.6",
+    "weasyprint==68.1",
+    "sqlglot==30.19.0",
+    "slowapi==0.1.10",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==9.1.1",
+    "pre-commit==4.6.2",
+    "ruff==0.16.9",
+    "mypy==2.3.1",
+    "types-PyYAML==6.0.12.20260906",
+]
+
+[dependency-groups]
+dev = [
+    "pytest==9.1.1",
+    "pre-commit==4.6.2",
+    "ruff==0.16.9",
+    "mypy==2.3.1",
+    "types-PyYAML==6.0.12.20260906",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+src = ["backend", "ingestion_engine", "benchmarking", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "UP",  # pyupgrade
+]
+ignore = [
+    "E501",  # line length handled by formatter / existing prose
+]
+
+[tool.ruff.lint.per-file-ignores]
+# FastAPI Depends/File/Form in defaults is the intended pattern.
+"backend/app/api/routes/*.py" = ["B008"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["backend", "ingestion_engine", "benchmarking"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"
+
+[tool.mypy]
+python_version = "3.11"
+mypy_path = "."
+explicit_package_bases = true
+# Gradual adoption: type-check newer modules first (expand over time).
+files = [
+    "backend/app/services/llm",
+    "backend/app/services/ai_sql_guard.py",
+    "backend/app/services/ai_sql_connection.py",
+    "backend/app/repositories",
+    "backend/app/core/paths.py",
+    "backend/app/core/rate_limit.py",
+    "backend/app/api/deps.py",
+]
+follow_imports = "silent"
+ignore_missing_imports = true
+warn_return_any = true
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+no_implicit_optional = true
+check_untyped_defs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true

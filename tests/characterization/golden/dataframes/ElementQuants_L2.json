@@ -1,0 +1,50 @@
+[
+  {
+    "Comment": "NaN",
+    "L2Code": "1.1",
+    "L2Name": "Foundations",
+    "Qty": 1200,
+    "QuantTypeCode": "DEFAULT",
+    "Unit": "m2"
+  },
+  {
+    "Comment": "Not applicable",
+    "L2Code": "1.2",
+    "L2Name": "Basement Excavation",
+    "Qty": 0,
+    "QuantTypeCode": "DEFAULT",
+    "Unit": "m3"
+  },
+  {
+    "Comment": "NaN",
+    "L2Code": "2.1",
+    "L2Name": "Frame",
+    "Qty": 4250,
+    "QuantTypeCode": "DEFAULT",
+    "Unit": "m2"
+  },
+  {
+    "Comment": "NaN",
+    "L2Code": "2.2",
+    "L2Name": "Upper Floors",
+    "Qty": 2800,
+    "QuantTypeCode": "DEFAULT",
+    "Unit": "m2"
+  },
+  {
+    "Comment": "NaN",
+    "L2Code": "3.1",
+    "L2Name": "External Walls",
+    "Qty": 2100,
+    "QuantTypeCode": "DEFAULT",
+    "Unit": "m2"
+  },
+  {
+    "Comment": "NaN",
+    "L2Code": "4.1",
+    "L2Name": "Roof",
+    "Qty": 1450,
+    "QuantTypeCode": "DEFAULT",
+    "Unit": "m2"
+  }
+]

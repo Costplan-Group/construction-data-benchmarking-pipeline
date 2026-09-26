@@ -7,7 +7,6 @@ from typing import Any
 
 import pandas as pd
 
-
 # NOTE: This script is intentionally self-contained so it can validate files
 # without importing `excel_file_ingestion.py` (which imports `dropbox`).
 
@@ -21,7 +20,14 @@ REQUIRED_SHEETS = [
 ]
 
 REQUIRED_COLUMNS = {
-    "ProjectInformation": ["ProjectID", "ProjectName", "LocationLabel", "SectorCode", "CostStage", "ContractorName"],
+    "ProjectInformation": [
+        "ProjectID",
+        "ProjectName",
+        "LocationLabel",
+        "SectorCode",
+        "CostStage",
+        "ContractorName",
+    ],
     "ProjectQuants": ["ProjectQuantCode", "Qty", "Unit"],
     "ElementQuants_L2": ["L2Code", "QuantTypeCode", "Qty"],
     "Level2": ["L2Code", "L2Name", "TotalCost"],
@@ -81,7 +87,7 @@ def main() -> None:
         dataframes: dict[str, pd.DataFrame] = read_workbook(args.file)
     except Exception as e:
         print(f"FAILED to read workbook: {type(e).__name__}: {e}")
-        raise SystemExit(1)
+        raise SystemExit(1) from e
 
     errors: list[dict[str, Any]] = []
 
@@ -180,4 +186,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

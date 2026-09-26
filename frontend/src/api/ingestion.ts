@@ -4,11 +4,24 @@ import type {
   AIQueryResponse,
   BatchSummary,
   IngestionRunResponse,
-  SupersetGuestTokenResponse,
   ValidationErrorCount,
   ValidationErrorDetail,
   ValidationErrorRow,
 } from "../types/ingestion";
+
+function apiKey(): string {
+  return (import.meta.env.VITE_API_KEY as string | undefined)?.trim() || "";
+}
+
+/** Headers for protected routes (/api/ai/*, upload). */
+function apiAuthHeaders(extra?: Record<string, string>): Record<string, string> {
+  const headers: Record<string, string> = { ...(extra || {}) };
+  const key = apiKey();
+  if (key) {
+    headers["X-API-Key"] = key;
+  }
+  return headers;
+}
 
 async function parseJsonResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
@@ -39,6 +52,10 @@ export async function uploadWorkbookWithProgress(
   return new Promise<IngestionRunResponse>((resolve, reject) => {
     const request = new XMLHttpRequest();
     request.open("POST", "/api/ingestion/upload");
+    const key = apiKey();
+    if (key) {
+      request.setRequestHeader("X-API-Key", key);
+    }
 
     request.upload.onprogress = (event) => {
       if (!onProgress || !event.lengthComputable) {
@@ -106,7 +123,7 @@ export function getErrorDownloadUrl(loadBatchId: string): string {
 export async function runAIQuery(question: string): Promise<AIQueryResponse> {
   const response = await fetch("/api/ai/query", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: apiAuthHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify({ question }),
   });
   return parseJsonResponse<AIQueryResponse>(response);
@@ -118,7 +135,7 @@ export async function createAIReportDraft(
 ): Promise<AIReportDraftResponse> {
   const response = await fetch("/api/ai/report-draft", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: apiAuthHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify({
       project_id: projectId,
       regenerate_fresh: Boolean(options?.regenerateFresh),
@@ -135,7 +152,7 @@ export async function saveAIReportDraft(payload: {
 }): Promise<AIReportDraftSaveResponse> {
   const response = await fetch("/api/ai/report-draft/save", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: apiAuthHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(payload),
   });
   return parseJsonResponse<AIReportDraftSaveResponse>(response);
@@ -153,7 +170,7 @@ async function exportAIReport(
 ): Promise<void> {
   const response = await fetch(endpoint, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: apiAuthHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(payload),
   });
   if (!response.ok) {
@@ -198,18 +215,4 @@ export async function exportAIReportPdf(payload: {
   report_context: Record<string, unknown>;
 }): Promise<void> {
   await exportAIReport("/api/ai/report-export/pdf", payload);
-}
-
-export async function getSupersetGuestToken(
-  dashboardId?: string,
-): Promise<SupersetGuestTokenResponse> {
-  const body = dashboardId?.trim()
-    ? { dashboard_id: dashboardId.trim() }
-    : {};
-  const response = await fetch("/api/superset/guest-token", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  return parseJsonResponse<SupersetGuestTokenResponse>(response);
 }

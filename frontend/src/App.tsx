@@ -1,5 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { embedDashboard } from "@superset-ui/embedded-sdk";
+import { useMemo, useState } from "react";
 import { Editor } from "@tinymce/tinymce-react";
 import "tinymce/tinymce";
 import "tinymce/icons/default";
@@ -20,7 +19,6 @@ import {
   getBatchErrorRows,
   getBatchSummary,
   getErrorDownloadUrl,
-  getSupersetGuestToken,
   runAIQuery,
   saveAIReportDraft,
   uploadWorkbookWithProgress,
@@ -92,7 +90,7 @@ function getStatusClass(status?: string | null) {
   return "status-badge status-neutral";
 }
 
-type PageId = "ingestion" | "ai-report" | "ai-qs" | "analytics";
+type PageId = "ingestion" | "ai-report" | "ai-qs";
 type EditableDraftSections = {
   executiveSummaryBody: string;
   executiveSummaryRecommendation: string;
@@ -139,22 +137,10 @@ function App() {
     null,
   );
   const [reportDraftSavedAt, setReportDraftSavedAt] = useState<string | null>(null);
-  const [supersetDashboardId, setSupersetDashboardId] = useState("");
-  const [supersetError, setSupersetError] = useState<string | null>(null);
-  const [isEmbeddingSuperset, setIsEmbeddingSuperset] = useState(false);
   const [sectionEditState, setSectionEditState] = useState<SectionEditState>({
     executiveSummary: false,
     commercialAnalysis: false,
   });
-  const supersetMountRef = useRef<HTMLDivElement | null>(null);
-  const lastEmbeddedDashboardIdRef = useRef<string | null>(null);
-  const autoLoadAttemptedDashboardIdRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    if (activePage !== "analytics" && supersetMountRef.current) {
-      supersetMountRef.current.innerHTML = "";
-    }
-  }, [activePage]);
 
   const activeBatchId = useMemo(() => uploadResult?.load_batch_id || "", [uploadResult]);
   const currentStatus = summary?.BatchStatus ?? uploadResult?.status ?? "Not started";
@@ -354,58 +340,8 @@ function App() {
     }
   }
 
-  const handleEmbedSupersetDashboard = useCallback(async () => {
-    if (!supersetMountRef.current) {
-      setSupersetError("Superset mount container is not ready.");
-      return;
-    }
-
-    setIsEmbeddingSuperset(true);
-    setSupersetError(null);
-    supersetMountRef.current.innerHTML = "";
-    try {
-      const tokenPayload = await getSupersetGuestToken(supersetDashboardId.trim() || undefined);
-      await embedDashboard({
-        id: tokenPayload.dashboard_id,
-        supersetDomain: tokenPayload.superset_url,
-        mountPoint: supersetMountRef.current,
-        fetchGuestToken: async () => tokenPayload.guest_token,
-        dashboardUiConfig: {
-          hideTitle: false,
-          hideChartControls: false,
-          hideTab: false,
-        },
-      });
-      setSupersetDashboardId(tokenPayload.dashboard_id);
-      lastEmbeddedDashboardIdRef.current = tokenPayload.dashboard_id;
-    } catch (error) {
-      setSupersetError(error instanceof Error ? error.message : "Failed to embed dashboard.");
-    } finally {
-      setIsEmbeddingSuperset(false);
-    }
-  }, [supersetDashboardId]);
-
-  useEffect(() => {
-    if (activePage !== "analytics") {
-      return;
-    }
-    const dashboardId = supersetDashboardId.trim();
-    if (isEmbeddingSuperset || !supersetMountRef.current) {
-      return;
-    }
-    const autoLoadKey = dashboardId || "__default__";
-    if (lastEmbeddedDashboardIdRef.current === dashboardId && dashboardId) {
-      return;
-    }
-    if (autoLoadAttemptedDashboardIdRef.current === autoLoadKey) {
-      return;
-    }
-    autoLoadAttemptedDashboardIdRef.current = autoLoadKey;
-    void handleEmbedSupersetDashboard();
-  }, [activePage, handleEmbedSupersetDashboard, isEmbeddingSuperset, supersetDashboardId]);
-
   return (
-    <main className={`app-shell ${activePage === "analytics" ? "app-shell-analytics" : ""}`}>
+    <main className="app-shell">
       <div className="top-nav">
         <button
           type="button"
@@ -420,13 +356,6 @@ function App() {
           onClick={() => setActivePage("ai-qs")}
         >
           AI QS Assistant
-        </button>
-        <button
-          type="button"
-          className={`tab-button ${activePage === "analytics" ? "tab-button-active" : ""}`}
-          onClick={() => setActivePage("analytics")}
-        >
-          Analytics
         </button>
         <button
           type="button"
@@ -929,24 +858,6 @@ function App() {
             </section>
           </section>
         </>
-      ) : activePage === "analytics" ? (
-        <>
-          <section className="section-grid">
-            <section className="section-card span-12">
-              <div className="action-row">
-                <button
-                  className="button-secondary"
-                  onClick={() => void handleEmbedSupersetDashboard()}
-                  disabled={isEmbeddingSuperset}
-                >
-                  {isEmbeddingSuperset ? "Refreshing..." : "Refresh dashboard"}
-                </button>
-              </div>
-              {supersetError ? <div className="message-error">{supersetError}</div> : null}
-              <div ref={supersetMountRef} className="superset-mount" />
-            </section>
-          </section>
-        </>
       ) : (
         <>
           <section className="hero">
@@ -1010,6 +921,12 @@ function App() {
                       <span className="summary-item-value">{aiResult.row_count}</span>
                     </div>
                   </div>
+
+                  {aiResult.truncated ? (
+                    <p style={{ marginTop: "12px", color: "var(--muted, #5c6570)" }}>
+                      Showing first {aiResult.row_count} rows (result was truncated).
+                    </p>
+                  ) : null}
 
                   <div className="summary-item" style={{ marginTop: "12px" }}>
                     <span className="summary-item-label">AI answer</span>

@@ -1,0 +1,26 @@
+[
+  {
+    "IsSelected": 1,
+    "LoadBatchID": "00000000-0000-0000-0000-000000000001",
+    "RowNum": 1,
+    "SourceFileName": "DEMO_Tender_Comparison_Workbook.xlsx",
+    "TendererLabel": "Contractor 1",
+    "TendererName": "Apex Build Ltd"
+  },
+  {
+    "IsSelected": 0,
+    "LoadBatchID": "00000000-0000-0000-0000-000000000001",
+    "RowNum": 2,
+    "SourceFileName": "DEMO_Tender_Comparison_Workbook.xlsx",
+    "TendererLabel": "Contractor 2",
+    "TendererName": "Horizon Construction PLC"
+  },
+  {
+    "IsSelected": 0,
+    "LoadBatchID": "00000000-0000-0000-0000-000000000001",
+    "RowNum": 3,
+    "SourceFileName": "DEMO_Tender_Comparison_Workbook.xlsx",
+    "TendererLabel": "Contractor 3",
+    "TendererName": "Meridian Works Ltd"
+  }
+]

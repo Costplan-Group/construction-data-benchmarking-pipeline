@@ -1,0 +1,92 @@
+[
+  {
+    "ItemDescription": "Excavate for foundations",
+    "L2Code": "NaN",
+    "L2Name": "NaN",
+    "Quantity": 1200,
+    "Rate": 45,
+    "RowType": "ITEM",
+    "TotalCost": 54000,
+    "Unit": "m2"
+  },
+  {
+    "ItemDescription": "Concrete strip foundations",
+    "L2Code": "NaN",
+    "L2Name": "NaN",
+    "Quantity": 180,
+    "Rate": 165,
+    "RowType": "ITEM",
+    "TotalCost": 29700,
+    "Unit": "m3"
+  },
+  {
+    "ItemDescription": "Hardcore and blinding",
+    "L2Code": "NaN",
+    "L2Name": "NaN",
+    "Quantity": 1200,
+    "Rate": 28,
+    "RowType": "ITEM",
+    "TotalCost": 33600,
+    "Unit": "m2"
+  },
+  {
+    "ItemDescription": "Heading - Ground slab",
+    "L2Code": "NaN",
+    "L2Name": "NaN",
+    "Quantity": "NaN",
+    "Rate": "NaN",
+    "RowType": "HEADING",
+    "TotalCost": "NaN",
+    "Unit": "NaN"
+  },
+  {
+    "ItemDescription": "Reinforced ground slab",
+    "L2Code": "NaN",
+    "L2Name": "NaN",
+    "Quantity": 1200,
+    "Rate": 95,
+    "RowType": "ITEM",
+    "TotalCost": 114000,
+    "Unit": "m2"
+  },
+  {
+    "ItemDescription": "Steel frame supply and erect",
+    "L2Code": "NaN",
+    "L2Name": "NaN",
+    "Quantity": 185,
+    "Rate": 2800,
+    "RowType": "ITEM",
+    "TotalCost": 518000,
+    "Unit": "t"
+  },
+  {
+    "ItemDescription": "Secondary steelwork",
+    "L2Code": "NaN",
+    "L2Name": "NaN",
+    "Quantity": 42,
+    "Rate": 3100,
+    "RowType": "ITEM",
+    "TotalCost": 130200,
+    "Unit": "t"
+  },
+  {
+    "ItemDescription": "Fire protection to steel",
+    "L2Code": "NaN",
+    "L2Name": "NaN",
+    "Quantity": 4250,
+    "Rate": 18,
+    "RowType": "ITEM",
+    "TotalCost": 76500,
+    "Unit": "m2"
+  },
+  {
+    "ItemDescription": "Holding-down bolts and baseplates",
+    "L2Code": "NaN",
+    "L2Name": "NaN",
+    "Quantity": 64,
+    "Rate": 220,
+    "RowType": "ITEM",
+    "TotalCost": 14080,
+    "Unit": "nr"
+  }
+]

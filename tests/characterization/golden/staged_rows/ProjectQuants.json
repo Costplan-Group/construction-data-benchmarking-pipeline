@@ -1,0 +1,42 @@
+[
+  {
+    "Comment": "Gross internal floor area",
+    "LoadBatchID": "00000000-0000-0000-0000-000000000001",
+    "ProjectQuantCode": "PQ-001",
+    "ProjectQuantName": "GIFA",
+    "Qty": "4250",
+    "RowNum": 2,
+    "SourceFileName": "DEMO_Tender_Comparison_Workbook.xlsx",
+    "Unit": "m2"
+  },
+  {
+    "Comment": null,
+    "LoadBatchID": "00000000-0000-0000-0000-000000000001",
+    "ProjectQuantCode": "PQ-002",
+    "ProjectQuantName": "Site Area",
+    "Qty": "11800",
+    "RowNum": 3,
+    "SourceFileName": "DEMO_Tender_Comparison_Workbook.xlsx",
+    "Unit": "m2"
+  },
+  {
+    "Comment": null,
+    "LoadBatchID": "00000000-0000-0000-0000-000000000001",
+    "ProjectQuantCode": "PQ-003",
+    "ProjectQuantName": "Parking Spaces",
+    "Qty": "42",
+    "RowNum": 4,
+    "SourceFileName": "DEMO_Tender_Comparison_Workbook.xlsx",
+    "Unit": "nr"
+  },
+  {
+    "Comment": "Above ground",
+    "LoadBatchID": "00000000-0000-0000-0000-000000000001",
+    "ProjectQuantCode": "PQ-004",
+    "ProjectQuantName": "Storeys",
+    "Qty": "3",
+    "RowNum": 5,
+    "SourceFileName": "DEMO_Tender_Comparison_Workbook.xlsx",
+    "Unit": "nr"
+  }
+]

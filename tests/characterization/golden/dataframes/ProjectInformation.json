@@ -1,0 +1,30 @@
+[
+  {
+    "Asbestos": "No",
+    "BaseDate": "2025-06-01",
+    "Basement": "No",
+    "BudgetStage": "Pre-Contract",
+    "ClientName": "Northbridge Education Trust",
+    "Contamination": "No",
+    "Contractor 1": "Apex Build Ltd",
+    "Contractor 2": "Horizon Construction PLC",
+    "Contractor 3": "Meridian Works Ltd",
+    "CostStage": "Tender",
+    "Currency": "GBP",
+    "DataStatus": "Draft",
+    "Demolition": "No",
+    "GIFA": 4250,
+    "HorizontalExtension": "Yes",
+    "LocationLabel": "North West",
+    "NewBuild": "Yes",
+    "Notes": "Fictional sample project for ingestion tests and Stage B demo. SUMMARY first metric pair is Costplan; variance = tender \u2212 Costplan.",
+    "ProgrammeLengthInWeeks": 78,
+    "ProgrammeType": "Traditional",
+    "ProjectID": "DEMO-001",
+    "ProjectName": "Riverside Learning Centre Extension",
+    "Refurbishment": "No",
+    "SectorCode": "Education",
+    "SelectedContractor": "Apex Build Ltd",
+    "VerticalExtension": "No"
+  }
+]

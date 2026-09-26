@@ -1,0 +1,11 @@
+# Copy to branding.yaml (gitignored) and customise for your organisation.
+# Alternatively set BRAND_* environment variables — see backend/app/reporting/branding.py.
+
+company_name: "Your Company Name"
+registration_number: "CN 00000000"
+website: "example.com"
+logo_path: "backend/app/reporting/assets/logos/company_logo.png"
+font_family: "Archivo"
+font_body_file: "Archivo_Expanded-Light.ttf"
+font_heading_file: "Archivo_Expanded-Bold.ttf"
+accent_colour: "#32c3e2"

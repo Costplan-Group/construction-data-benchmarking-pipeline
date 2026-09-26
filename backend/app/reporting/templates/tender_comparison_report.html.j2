@@ -1,0 +1,184 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    {% if font_face_css %}{{ font_face_css|safe }}{% endif %}
+    @page {
+      size: A4;
+      margin: 28mm 12mm 36mm 12mm;
+    }
+    body {
+      font-family: "{{ font_family }}", Arial, sans-serif;
+      background: #ffffff;
+      color: #000000;
+      font-size: 10px;
+      margin: 0;
+    }
+    .pdf-header-logo {
+      position: fixed;
+      top: 8mm;
+      right: 12mm;
+      left: auto;
+      text-align: right;
+      z-index: 1000;
+      pointer-events: none;
+    }
+    .pdf-header-logo .brand-logo {
+      display: block;
+      max-height: 16mm;
+      width: auto;
+      margin: 0;
+    }
+    h1 { margin-bottom: 8px; color: #425667; font-weight: 700; font-size: 18px; }
+    h2 { margin-bottom: 8px; color: {{ accent_colour }}; font-weight: 700; font-size: 12px; }
+    h3 { margin-bottom: 8px; color: #425667; font-weight: 700; font-size: 11px; }
+    p { line-height: 1.5; white-space: pre-wrap; }
+    ol { margin-top: 10px; margin-bottom: 14px; padding-left: 22px; }
+    ol li { margin-bottom: 8px; line-height: 1.6; }
+    ul { margin-top: 8px; margin-bottom: 20px; }
+    ul li { margin-bottom: 6px; line-height: 1.5; }
+    table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+    th, td { border: 1px solid #d1d5db; padding: 8px; text-align: left; color: #000000; }
+    th { background: #4f6577; color: {{ accent_colour }}; }
+    .tender-review-note { margin-top: 8px; font-style: italic; }
+    .pdf-footer {
+      position: fixed;
+      left: 12mm;
+      right: 12mm;
+      bottom: -24mm;
+      color: #334155;
+      font-size: 8px;
+    }
+    .pdf-footer-line {
+      border-top: 2px solid {{ accent_colour }};
+      margin-bottom: 8px;
+    }
+    .pdf-footer-row {
+      display: table;
+      width: 100%;
+      table-layout: fixed;
+    }
+    .pdf-footer-col {
+      display: table-cell;
+      vertical-align: middle;
+    }
+    .pdf-footer-left {
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+      line-height: 1.3;
+    }
+    .pdf-footer-center {
+      text-align: center;
+      font-size: 10px;
+      font-weight: 700;
+      color: #475569;
+    }
+    .pdf-footer-right {
+      text-align: right;
+      white-space: nowrap;
+    }
+    .footer-mark {
+      display: inline-block;
+      width: 40px;
+      height: 0;
+      border-top: 10px solid #425667;
+      border-right: 8px solid transparent;
+      vertical-align: middle;
+      margin-right: 8px;
+    }
+    .footer-mark-accent {
+      color: {{ accent_colour }};
+      font-weight: 700;
+      margin-right: 8px;
+      vertical-align: middle;
+    }
+    .footer-page::before {
+      content: "Page " counter(page) " of " counter(pages);
+      font-size: 10px;
+      color: #334155;
+    }
+  </style>
+</head>
+<body>
+  {% if logo_src %}
+  <div class="pdf-header-logo" aria-hidden="true">
+    <img class="brand-logo" src="{{ logo_src }}" alt="" />
+  </div>
+  {% endif %}
+  <h1>Tender Comparison Report</h1>
+  <p><strong>Project ID:</strong> {{ project_id }}</p>
+  <p><strong>Project Name:</strong> {{ project_name }}</p>
+  <p><strong>Location:</strong> {{ project_location }}</p>
+  <h2>01 - Executive Summary</h2>
+  <h3>Project Information</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>Field</th>
+        <th>Value</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>Project Name</td><td>{{ project_name }}</td></tr>
+      <tr><td>Project Description</td><td>{{ project_description }}</td></tr>
+      <tr><td>Number of Responses</td><td>{{ responses_count }}</td></tr>
+    </tbody>
+  </table>
+  <h3>Tender Review</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>Contractor</th>
+        <th>Final Adjusted Tender Sum</th>
+        <th>Deduct Construction Budget</th>
+        <th>Variance to Construction Budget</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in tender_rows %}
+      <tr>
+        <td>{{ row.contractor }}</td>
+        <td>{{ row.final_adjusted_tender_sum }}</td>
+        <td>{{ row.construction_budget if row.construction_budget is defined else construction_budget }}</td>
+        <td>{{ row.variance_to_construction_budget if row.variance_to_construction_budget is defined else row.variance_to_budget }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="tender-review-note">The above figures include any adjustments we have made in the submissions to ensure an equal and fair comparison is conducted. The figures also include any deductions made by the tendering contractors following the post tender discussions and negotiations. The detailed breakdown of all tender returns is located under the appendices.</p>
+  <h3>Recommendation</h3>
+  <p>{{ recommendation }}</p>
+  <h3>Recommended Next Steps</h3>
+  <ol>
+    {% for step in next_steps %}
+    <li>{{ step }}</li>
+    {% endfor %}
+  </ol>
+
+  <h2>02 - Introduction</h2>
+  <h3>Report Overview</h3>
+  <p>{{ introduction }}</p>
+  <h3>Tenderer List</h3>
+  <ul>
+    {% for name in tenderers %}
+    <li>{{ name }}</li>
+    {% endfor %}
+  </ul>
+
+  <footer class="pdf-footer">
+    <div class="pdf-footer-line"></div>
+    <div class="pdf-footer-row">
+      <div class="pdf-footer-col pdf-footer-left">
+        {% for line in footer_lines %}{{ line }}{% if not loop.last %}<br/>{% endif %}{% endfor %}
+      </div>
+      <div class="pdf-footer-col pdf-footer-center">{{ website }}</div>
+      <div class="pdf-footer-col pdf-footer-right">
+        <span class="footer-mark"></span>
+        <span class="footer-mark-accent">/</span>
+        <span class="footer-page"></span>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>

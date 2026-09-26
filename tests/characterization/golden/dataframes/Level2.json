@@ -1,0 +1,50 @@
+[
+  {
+    "L1Code": "1",
+    "L1Name": "Substructure",
+    "L2Code": "1.1",
+    "L2Name": "Foundations",
+    "Rate": "450.0",
+    "TotalCost": "540000.0"
+  },
+  {
+    "L1Code": "1",
+    "L1Name": "Substructure",
+    "L2Code": "1.2",
+    "L2Name": "Basement Excavation",
+    "Rate": "0.0",
+    "TotalCost": "0.0"
+  },
+  {
+    "L1Code": "2",
+    "L1Name": "Superstructure",
+    "L2Code": "2.1",
+    "L2Name": "Frame",
+    "Rate": "320.0",
+    "TotalCost": "1360000.0"
+  },
+  {
+    "L1Code": "2",
+    "L1Name": "Superstructure",
+    "L2Code": "2.2",
+    "L2Name": "Upper Floors",
+    "Rate": "185.0",
+    "TotalCost": "518000.0"
+  },
+  {
+    "L1Code": "3",
+    "L1Name": "Internal Finishes",
+    "L2Code": "3.1",
+    "L2Name": "External Walls",
+    "Rate": "210.0",
+    "TotalCost": "441000.0"
+  },
+  {
+    "L1Code": "4",
+    "L1Name": "Roof",
+    "L2Code": "4.1",
+    "L2Name": "Roof Coverings",
+    "Rate": "275.0",
+    "TotalCost": "398750.0"
+  }
+]

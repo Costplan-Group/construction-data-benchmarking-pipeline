@@ -1,63 +1,64 @@
-from datetime import datetime, timezone
+"""Report export: Word (docxtpl) and PDF (WeasyPrint + Jinja2)."""
+
+from __future__ import annotations
+
+import re
+from abc import ABC, abstractmethod
+from datetime import UTC, datetime
 from html import unescape
 from pathlib import Path
-import re
 from typing import Any
 
 from docxtpl import DocxTemplate
 from fastapi import HTTPException
+from jinja2 import Environment, FileSystemLoader, select_autoescape
 from weasyprint import HTML
 
-"""
-the module is a report generator that takes the structured project and tender data(from your frontend or API) and produces a word and pdf report.
-"""
+from backend.app.core.paths import get_exports_dir
+from backend.app.reporting.branding import BrandProfile, get_brand_profile
 
 REPORTING_DIR = Path(__file__).resolve().parent.parent / "reporting"
-TEMPLATE_PATH = REPORTING_DIR / "templates" / "TCR_Template.docx"
-EXPORTS_DIR = REPORTING_DIR / "exports"
+TEMPLATE_PATH = REPORTING_DIR / "templates" / "Tender_Comparison_Template.docx"
+PDF_TEMPLATE_NAME = "tender_comparison_report.html.j2"
 ASSETS_DIR = REPORTING_DIR / "assets"
 FONTS_DIR = ASSETS_DIR / "fonts"
-LOGOS_DIR = ASSETS_DIR / "logos"
-# Prefer the CPG asset; fall back to legacy filename if present.
-_LOGO_CANDIDATES = ("CPG_1colBlueR_d.png", "company_logo.png")
+TEMPLATES_DIR = REPORTING_DIR / "templates"
 
 
-def _report_logo_path() -> Path | None:
-    for name in _LOGO_CANDIDATES:
-        candidate = LOGOS_DIR / name
-        if candidate.exists():
-            return candidate
-    return None
-DEFAULT_FONT_FAMILY = "Archivo"
-DEFAULT_FONT_BODY_FILE = "Archivo_Expanded-Light.ttf"
-DEFAULT_FONT_HEADING_FILE = "Archivo_Expanded-Bold.ttf"
+def _report_logo_path(brand: BrandProfile | None = None) -> Path | None:
+    profile = brand or get_brand_profile()
+    return profile.resolved_logo_path()
 
-# helper function to slugify the project id.
+
+def _logo_src_for_pdf(logo_path: Path) -> str:
+    """WeasyPrint base_url is REPORTING_DIR; prefer assets/ relative URLs when possible."""
+    try:
+        rel = logo_path.resolve().relative_to(REPORTING_DIR.resolve())
+        return rel.as_posix()
+    except ValueError:
+        return logo_path.resolve().as_uri()
+
+
 def _slug(value: str) -> str:
     cleaned = "".join(ch if ch.isalnum() or ch in ("-", "_") else "_" for ch in value)
     return cleaned.strip("_") or "report"
 
-# helper function to convert TinyMCE HTML to plain text safe for docxtpl placeholders.
+
 def _to_docx_text(value: Any) -> str:
-    """
-    Convert potential TinyMCE HTML into plain text safe for docxtpl placeholders.
-    """
+    """Convert potential TinyMCE HTML into plain text safe for docxtpl placeholders."""
     text = str(value or "")
     if not text:
         return ""
-    # Convert common block tags into line breaks before stripping.
     text = re.sub(r"</(p|div|li|h[1-6])\s*>", "\n", text, flags=re.IGNORECASE)
     text = re.sub(r"<br\s*/?>", "\n", text, flags=re.IGNORECASE)
     text = re.sub(r"<[^>]+>", "", text)
     text = unescape(text)
-    # Normalize excessive whitespace/newlines.
     text = re.sub(r"\r\n?", "\n", text)
     text = re.sub(r"\n{3,}", "\n\n", text)
     return text.strip()
 
 
 def _clear_header_images(header) -> None:
-    """Remove embedded images from a Word header so logos are never stacked."""
     element = header._element
     for node in element.xpath('.//*[local-name()="drawing" or local-name()="pict"]'):
         parent = node.getparent()
@@ -66,7 +67,6 @@ def _clear_header_images(header) -> None:
 
 
 def _apply_docx_header_logo(docx_path: Path, logo_path: Path) -> None:
-    """Right-align a single brand logo in the primary header on every page."""
     if not logo_path.exists():
         return
     try:
@@ -78,7 +78,6 @@ def _apply_docx_header_logo(docx_path: Path, logo_path: Path) -> None:
     doc = DocxDocument(str(docx_path))
     for section in doc.sections:
         header = section.header
-        # Template may already contain one or more logos; clear them first.
         _clear_header_images(header)
         p = header.add_paragraph()
         p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
@@ -90,11 +89,25 @@ def _apply_docx_header_logo(docx_path: Path, logo_path: Path) -> None:
 
 
 def _prepare_docx_context(payload: dict[str, Any]) -> dict[str, Any]:
-    report_context = payload.get("report_context", {}) if isinstance(payload.get("report_context"), dict) else {}
-    draft_sections = payload.get("draft_sections", {}) if isinstance(payload.get("draft_sections"), dict) else {}
-    project = report_context.get("project", {}) if isinstance(report_context.get("project"), dict) else {}
-    commercial = report_context.get("commercial", {}) if isinstance(report_context.get("commercial"), dict) else {}
-    tender_meta = report_context.get("tender_meta", {}) if isinstance(report_context.get("tender_meta"), dict) else {}
+    report_context = (
+        payload.get("report_context", {}) if isinstance(payload.get("report_context"), dict) else {}
+    )
+    draft_sections = (
+        payload.get("draft_sections", {}) if isinstance(payload.get("draft_sections"), dict) else {}
+    )
+    project = (
+        report_context.get("project", {}) if isinstance(report_context.get("project"), dict) else {}
+    )
+    commercial = (
+        report_context.get("commercial", {})
+        if isinstance(report_context.get("commercial"), dict)
+        else {}
+    )
+    tender_meta = (
+        report_context.get("tender_meta", {})
+        if isinstance(report_context.get("tender_meta"), dict)
+        else {}
+    )
     executive = (
         draft_sections.get("executive_summary", {})
         if isinstance(draft_sections.get("executive_summary"), dict)
@@ -123,9 +136,7 @@ def _prepare_docx_context(payload: dict[str, Any]) -> dict[str, Any]:
         tenderers = []
 
     contractor_names = [str(row.get("contractor") or "") for row in tender_rows]
-    final_adjusted_values = [
-        row.get("final_adjusted_tender_sum", 0) for row in tender_rows
-    ]
+    final_adjusted_values = [row.get("final_adjusted_tender_sum", 0) for row in tender_rows]
     construction_budget = commercial.get("construction_budget", 0)
     construction_budget_values = [construction_budget for _ in tender_rows]
     variance_values = [
@@ -153,7 +164,6 @@ def _prepare_docx_context(payload: dict[str, Any]) -> dict[str, Any]:
         "commercial_analysis": _to_docx_text(commercial_section.get("body") or ""),
         "construction_budget": construction_budget,
         "tender_rows": tender_rows,
-        # Compatibility aliases for templates that use `row` directly.
         "row": first_tender_row,
         "rows": tender_rows,
         "tender_review_contractors": contractor_names,
@@ -165,257 +175,107 @@ def _prepare_docx_context(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _build_pdf_html(payload: dict[str, Any]) -> str:
-    context = _prepare_docx_context(payload)
-    logo_path = _report_logo_path()
-    logo_html = ""
-    if logo_path is not None:
-        rel = f"assets/logos/{logo_path.name}"
-        logo_html = (
-            f'<div class="pdf-header-logo" aria-hidden="true">'
-            f'<img class="brand-logo" src="{rel}" alt="" />'
-            f"</div>"
-        )
-    font_face_css = (
-        f"""
+def _pdf_jinja_env() -> Environment:
+    return Environment(
+        loader=FileSystemLoader(str(TEMPLATES_DIR)),
+        autoescape=select_autoescape(enabled_extensions=("html", "j2", "xml")),
+    )
+
+
+def _build_font_face_css(brand: BrandProfile) -> str:
+    body = brand.font_body_file
+    heading = brand.font_heading_file
+    if not (FONTS_DIR / body).exists() or not (FONTS_DIR / heading).exists():
+        return ""
+    # Trusted brand-controlled font paths only — marked safe in template.
+    family = brand.font_family.replace('"', "")
+    body_safe = body.replace('"', "")
+    heading_safe = heading.replace('"', "")
+    return f"""
     @font-face {{
-      font-family: "{DEFAULT_FONT_FAMILY}";
-      src: url("assets/fonts/{DEFAULT_FONT_BODY_FILE}") format("truetype");
+      font-family: "{family}";
+      src: url("assets/fonts/{body_safe}") format("truetype");
       font-weight: 400;
       font-style: normal;
     }}
     @font-face {{
-      font-family: "{DEFAULT_FONT_FAMILY}";
-      src: url("assets/fonts/{DEFAULT_FONT_HEADING_FILE}") format("truetype");
+      font-family: "{family}";
+      src: url("assets/fonts/{heading_safe}") format("truetype");
       font-weight: 700;
       font-style: normal;
     }}
 """
-        if (FONTS_DIR / DEFAULT_FONT_BODY_FILE).exists() and (FONTS_DIR / DEFAULT_FONT_HEADING_FILE).exists()
-        else ""
-    )
-    next_steps_html = "".join(f"<li>{step}</li>" for step in context["next_steps"])
-    project_info_rows_html = "".join(
-        (
-            "<tr>"
-            f"<td>{field}</td>"
-            f"<td>{value}</td>"
-            "</tr>"
+
+
+class ReportExporter(ABC):
+    brand: BrandProfile
+
+    def __init__(self, brand: BrandProfile | None = None) -> None:
+        self.brand = brand or get_brand_profile()
+
+    @abstractmethod
+    def export(self, payload: dict[str, Any]) -> Path:
+        raise NotImplementedError
+
+
+class DocxExporter(ReportExporter):
+    def export(self, payload: dict[str, Any]) -> Path:
+        if not TEMPLATE_PATH.exists():
+            raise HTTPException(
+                status_code=500,
+                detail=(
+                    f"Word template not found at '{TEMPLATE_PATH}'. "
+                    "Run: python -m backend.app.reporting.build_word_template"
+                ),
+            )
+        context = _prepare_docx_context(payload)
+        exports_dir = get_exports_dir()
+        exports_dir.mkdir(parents=True, exist_ok=True)
+        stamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
+        file_name = f"Tender_Comparison_{_slug(context['project_id'] or 'project')}_{stamp}.docx"
+        output_path = exports_dir / file_name
+
+        doc = DocxTemplate(str(TEMPLATE_PATH))
+        doc.render(context)
+        doc.save(str(output_path))
+        logo_path = _report_logo_path(self.brand)
+        if logo_path is not None:
+            _apply_docx_header_logo(output_path, logo_path)
+        return output_path
+
+
+class PdfExporter(ReportExporter):
+    def export(self, payload: dict[str, Any]) -> Path:
+        exports_dir = get_exports_dir()
+        exports_dir.mkdir(parents=True, exist_ok=True)
+        project_id = payload.get("project_id") or "project"
+        stamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
+        file_name = f"Tender_Comparison_{_slug(str(project_id))}_{stamp}.pdf"
+        output_path = exports_dir / file_name
+        html = self._render_html(payload)
+        HTML(string=html, base_url=str(REPORTING_DIR)).write_pdf(str(output_path))
+        return output_path
+
+    def _render_html(self, payload: dict[str, Any]) -> str:
+        context = _prepare_docx_context(payload)
+        brand = self.brand
+        logo_path = brand.resolved_logo_path()
+        logo_src = _logo_src_for_pdf(logo_path) if logo_path is not None else None
+        template = _pdf_jinja_env().get_template(PDF_TEMPLATE_NAME)
+        return template.render(
+            **context,
+            font_family=brand.font_family,
+            accent_colour=brand.accent_colour,
+            font_face_css=_build_font_face_css(brand),
+            logo_src=logo_src,
+            footer_lines=brand.pdf_footer_left_lines(),
+            website=brand.website,
         )
-        for field, value in [
-            ("Project Name", context.get("project_name", "")),
-            ("Project Description", context.get("project_description", "")),
-            ("Number of Responses", context.get("responses_count", "")),
-        ]
-    )
-    tenderers_html = "".join(f"<li>{name}</li>" for name in context["tenderers"])
-    rows_html = "".join(
-        (
-            "<tr>"
-            f"<td>{row.get('contractor', '')}</td>"
-            f"<td>{row.get('final_adjusted_tender_sum', '')}</td>"
-            f"<td>{row.get('construction_budget', context.get('construction_budget', ''))}</td>"
-            f"<td>{row.get('variance_to_construction_budget', row.get('variance_to_budget', ''))}</td>"
-            "</tr>"
-        )
-        for row in context["tender_rows"]
-    )
-    return f"""
-<!doctype html>
-<html>
-<head>
-  <meta charset="utf-8" />
-  <style>
-    {font_face_css}
-    @page {{
-      size: A4;
-      margin: 28mm 12mm 36mm 12mm;
-    }}
-    body {{
-      font-family: "{DEFAULT_FONT_FAMILY}", Arial, sans-serif;
-      background: #ffffff;
-      color: #000000;
-      font-size: 10px;
-      margin: 0;
-    }}
-    .pdf-header-logo {{
-      position: fixed;
-      top: 8mm;
-      right: 12mm;
-      left: auto;
-      text-align: right;
-      z-index: 1000;
-      pointer-events: none;
-    }}
-    .pdf-header-logo .brand-logo {{
-      display: block;
-      max-height: 16mm;
-      width: auto;
-      margin: 0;
-    }}
-    h1 {{ margin-bottom: 8px; color: #425667; font-weight: 700; font-size: 18px; }}
-    h2 {{ margin-bottom: 8px; color: #32c3e2; font-weight: 700; font-size: 12px; }}
-    h3 {{ margin-bottom: 8px; color: #425667; font-weight: 700; font-size: 11px; }}
-    p {{ line-height: 1.5; white-space: pre-wrap; }}
-    ol {{ margin-top: 10px; margin-bottom: 14px; padding-left: 22px; }}
-    ol li {{ margin-bottom: 8px; line-height: 1.6; }}
-    ul {{ margin-top: 8px; margin-bottom: 20px; }}
-    ul li {{ margin-bottom: 6px; line-height: 1.5; }}
-    table {{ width: 100%; border-collapse: collapse; margin-top: 12px; }}
-    th, td {{ border: 1px solid #d1d5db; padding: 8px; text-align: left; color: #000000; }}
-    th {{ background: #4f6577; color: #32c3e2; }}
-    .tender-review-note {{ margin-top: 8px; font-style: italic; }}
-    .pdf-footer {{
-      position: fixed;
-      left: 12mm;
-      right: 12mm;
-      bottom: -24mm;
-      color: #334155;
-      font-size: 8px;
-    }}
-    .pdf-footer-line {{
-      border-top: 2px solid #8fd7e7;
-      margin-bottom: 8px;
-    }}
-    .pdf-footer-row {{
-      display: table;
-      width: 100%;
-      table-layout: fixed;
-    }}
-    .pdf-footer-col {{
-      display: table-cell;
-      vertical-align: middle;
-    }}
-    .pdf-footer-left {{
-      text-transform: uppercase;
-      letter-spacing: 0.3px;
-      line-height: 1.3;
-    }}
-    .pdf-footer-center {{
-      text-align: center;
-      font-size: 10px;
-      font-weight: 700;
-      color: #475569;
-    }}
-    .pdf-footer-right {{
-      text-align: right;
-      white-space: nowrap;
-    }}
-    .footer-mark {{
-      display: inline-block;
-      width: 40px;
-      height: 0;
-      border-top: 10px solid #425667;
-      border-right: 8px solid transparent;
-      vertical-align: middle;
-      margin-right: 8px;
-    }}
-    .footer-mark-accent {{
-      color: #32c3e2;
-      font-weight: 700;
-      margin-right: 8px;
-      vertical-align: middle;
-    }}
-    .footer-page::before {{
-      content: "Page " counter(page) " of " counter(pages);
-      font-size: 10px;
-      color: #334155;
-    }}
-  </style>
-</head>
-<body>
-  {logo_html}
-  <h1>Tender Comparison Report</h1>
-  <p><strong>Project ID:</strong> {context["project_id"]}</p>
-  <p><strong>Project Name:</strong> {context["project_name"]}</p>
-  <p><strong>Location:</strong> {context["project_location"]}</p>
-  <h2>01 - Executive Summary</h2>
-  <h3>Project Information</h3>
-  <table>
-    <thead>
-      <tr>
-        <th>Field</th>
-        <th>Value</th>
-      </tr>
-    </thead>
-    <tbody>
-      {project_info_rows_html}
-    </tbody>
-  </table>
-  <h3>Tender Review</h3>
-  <table>
-    <thead>
-      <tr>
-        <th>Contractor</th>
-        <th>Final Adjusted Tender Sum</th>
-        <th>Deduct Construction Budget</th>
-        <th>Variance to Construction Budget</th>
-      </tr>
-    </thead>
-    <tbody>
-      {rows_html}
-    </tbody>
-  </table>
-  <p class="tender-review-note">The above figures include any adjustments we have made in the submissions to ensure an equal and fair comparison is conducted. The figures also include any deductions made by the tendering contractors following the post tender discussions and negotiations. The detailed breakdown of all tender returns is located under the appendices.</p>
-  <h3>Recommendation</h3>
-  <p>{context["recommendation"]}</p>
-  <h3>Recommended Next Steps</h3>
-  <ol>{next_steps_html}</ol>
-
-  <h2>02 - Introduction</h2>
-  <h3>Report Overview</h3>
-  <p>{context["introduction"]}</p>
-  <h3>Tenderer List</h3>
-  <ul>{tenderers_html}</ul>
-
-  <footer class="pdf-footer">
-    <div class="pdf-footer-line"></div>
-    <div class="pdf-footer-row">
-      <div class="pdf-footer-col pdf-footer-left">
-        COSTPLAN SERVICES (SOUTH EAST) LTD<br/>
-        CN 08842649
-      </div>
-      <div class="pdf-footer-col pdf-footer-center">cspsqs.com</div>
-      <div class="pdf-footer-col pdf-footer-right">
-        <span class="footer-mark"></span>
-        <span class="footer-mark-accent">/</span>
-        <span class="footer-page"></span>
-      </div>
-    </div>
-  </footer>
-</body>
-</html>
-"""
 
 
-def export_report_docx(payload: dict[str, Any]) -> Path:
-    if not TEMPLATE_PATH.exists():
-        raise HTTPException(
-            status_code=500,
-            detail=f"Word template not found at '{TEMPLATE_PATH}'. Add TCR_Template.docx first.",
-        )
-    context = _prepare_docx_context(payload)
-    EXPORTS_DIR.mkdir(parents=True, exist_ok=True)
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-    file_name = f"Tender_Comparison_{_slug(context['project_id'] or 'project')}_{stamp}.docx"
-    output_path = EXPORTS_DIR / file_name
-
-    doc = DocxTemplate(str(TEMPLATE_PATH))
-    doc.render(context)
-    doc.save(str(output_path))
-    logo_path = _report_logo_path()
-    if logo_path is not None:
-        _apply_docx_header_logo(output_path, logo_path)
-    return output_path
+def export_report_docx(payload: dict[str, Any], brand: BrandProfile | None = None) -> Path:
+    return DocxExporter(brand=brand).export(payload)
 
 
-def export_report_pdf(payload: dict[str, Any]) -> Path:
-    EXPORTS_DIR.mkdir(parents=True, exist_ok=True)
-    project_id = payload.get("project_id") or "project"
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-    file_name = f"Tender_Comparison_{_slug(str(project_id))}_{stamp}.pdf"
-    output_path = EXPORTS_DIR / file_name
-    html = _build_pdf_html(payload)
-    HTML(string=html, base_url=str(REPORTING_DIR)).write_pdf(str(output_path))
-    return output_path
-
+def export_report_pdf(payload: dict[str, Any], brand: BrandProfile | None = None) -> Path:
+    return PdfExporter(brand=brand).export(payload)

@@ -16,10 +16,23 @@ outputs/
 artifacts/
 *.log
 *.xlsx
+!sample_data/*.xlsx
 backend/app/templates/
+test.pdf
+
+# Runtime artifacts (drafts / DOCX / PDF exports) — override with DATA_DIR
+/data/
+
+# Reporting package assets (templates stay in-repo; generated Word templates ignored)
+backend/app/reporting/assets/logos/*
+!backend/app/reporting/assets/logos/.gitkeep
+backend/app/reporting/templates/*.docx
 
 # Secrets
 venv/
 .env
 *.key
 *.pem
+
+# Local brand identity (use branding.example.yaml as the template)
+/branding.yaml

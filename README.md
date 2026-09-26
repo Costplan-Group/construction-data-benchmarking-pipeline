@@ -13,7 +13,7 @@ Current backend capabilities:
 - return batch summary and validation errors
 - download validation errors as CSV
 - ask natural-language database questions via GROQ AI SQL Assistant
-- embed Apache Superset analytics dashboards in the frontend
+- generate and export AI tender comparison report drafts (Word/PDF)
 
 The ingestion flow supports uploaded files and local file testing only.
 
@@ -28,11 +28,66 @@ python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 ```
 
+For tests and git hooks (dev tools):
+
+```powershell
+python -m pip install -r requirements-dev.txt
+```
+
+Dependencies are declared and pinned in `pyproject.toml`. `requirements.txt` / `requirements-dev.txt` are locked exports (runtime vs dev). The full resolver lock is `uv.lock`. Preferred install with [uv](https://github.com/astral-sh/uv):
+
+```powershell
+uv sync --group dev
+```
+
+After changing pins in `pyproject.toml`, refresh the lock and exports:
+
+```powershell
+uv lock
+uv export --no-dev --no-hashes -o requirements.txt
+uv export --only-group dev --no-hashes -o requirements-dev.txt
+```
+
 If PowerShell blocks activation, run:
 
 ```powershell
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 ```
+
+### Secret scanning and code quality hooks
+
+Install git hooks once per clone (after `pip install -r requirements-dev.txt` or `uv sync --group dev`):
+
+```powershell
+pre-commit install
+```
+
+Hooks on every commit:
+
+- **ruff** / **ruff-format** — lint and format Python
+- **mypy** — type-check `backend` (stricter on newer modules)
+- **gitleaks** — block secrets from being committed
+
+Useful commands:
+
+```powershell
+# Run all hooks on staged files
+pre-commit run
+
+# Run all hooks on the whole repo
+pre-commit run --all-files
+
+# Individual tools
+ruff check .
+ruff format .
+mypy
+pre-commit run gitleaks --all-files
+
+# Emergency skip (use sparingly)
+# SKIP=gitleaks git commit -m "message"
+```
+
+Config: `.pre-commit-config.yaml`, `.gitleaks.toml`, and `[tool.ruff]` / `[tool.mypy]` in `pyproject.toml`.
 
 ## Run The Frontend
 
@@ -51,23 +106,17 @@ Open in browser:
 Notes:
 
 - Keep the backend running on `http://127.0.0.1:8001` while using the frontend.
-- Vite is configured to proxy `/api` requests to the backend.
+- Vite (`frontend/vite.config.ts`) proxies `/api` to `http://127.0.0.1:8001`.
+- CORS defaults allow the Vite origins `http://localhost:5173` and `http://127.0.0.1:5173`.
 
 ## Run The Backend
+
+Copy `.env.example` to `.env` and set SQL connectivity (either a full ODBC string or `SQL_SERVER` + `SQL_DB`). The ingestion engine builds the connection string from those values via `IngestionConfig` (`ingestion_engine/config.py`).
 
 Start the FastAPI app from the repository root:
 
 ```powershell
 python -m uvicorn backend.app.main:app --reload --reload-dir backend --reload-dir ingestion_engine --port 8001
-```
-
-Superset embed runtime expects these values in root `.env`:
-
-```env
-SUPERSET_URL=http://127.0.0.1:8088
-SUPERSET_API_USERNAME=admin
-SUPERSET_API_PASSWORD=your_password
-SUPERSET_DEFAULT_DASHBOARD_ID=94db7fc1-ef6a-4d80-bedf-44546a4f6d60
 ```
 
 Open the API docs in your browser:
@@ -79,18 +128,65 @@ Health check:
 
 - `http://127.0.0.1:8001/api/health`
 
+## API protection
+
+Upload and all `/api/ai/*` routes require an API key and are rate-limited.
+
+| Control | Detail |
+|---------|--------|
+| API key | Header `X-API-Key` must match backend `API_KEY`. Missing config → **503**; wrong/missing key → **401**. |
+| Upload size | Rejects bodies larger than `UPLOAD_MAX_BYTES` (default 20 MiB) with **413**. |
+| Rate limits | `API_RATE_LIMIT_AI` (default `20/minute`) on AI routes; `API_RATE_LIMIT_UPLOAD` (default `10/minute`) on upload. |
+
+```env
+API_KEY=change-me-local-api-key
+UPLOAD_MAX_BYTES=20971520
+API_RATE_LIMIT_AI=20/minute
+API_RATE_LIMIT_UPLOAD=10/minute
+```
+
+Frontend: set the same value in `frontend/.env` as `VITE_API_KEY` (see `frontend/.env.example`), then restart Vite.
+
+Batch/health endpoints stay open for local POC batch inspection after upload.
+
 ## AI SQL Assistant (GROQ)
 
 The backend includes an AI SQL Assistant that converts natural-language questions
-to SQL and executes read-only queries against your database.
+to SQL and executes them against the **committed warehouse** (`dbo.Dim*` / `dbo.Fact*`).
+This is the knowledge-base path. **AI Report writing** still reads **staging** for the
+latest project batch.
 
-### Environment variable
-
-Set this in `.env` before using the AI endpoint:
+### Environment variables
 
 ```env
 GROQ_API_KEY=your_groq_api_key
+
+# Dedicated read-only SQL login for AI queries (required — no ingestion fallback)
+AI_SQL_USER=ai_readonly
+AI_SQL_PASSWORD=your_ai_readonly_password
+AI_SQL_SERVER=YOUR_SERVER\INSTANCE
+AI_SQL_DATABASE=YOUR_DATABASE
+# Optional overrides:
+# AI_SQL_MAX_ROWS=500
+# AI_SQL_QUERY_TIMEOUT_S=30
 ```
+
+If any of `AI_SQL_USER`, `AI_SQL_PASSWORD`, `AI_SQL_SERVER`, or `AI_SQL_DATABASE`
+are missing, `POST /api/ai/query` returns **503** and does not use the ingestion
+SQL connection.
+
+### DBA: create the read-only login
+
+Per environment, a DBA runs [`database/security/001_ai_readonly_login.sql`](database/security/001_ai_readonly_login.sql).
+The script is idempotent. The login name is a variable (default `ai_readonly`);
+the password is passed at run time and is never stored in git:
+
+```powershell
+sqlcmd -S your_server -d your_database -E -i database/security/001_ai_readonly_login.sql -v LoginName=ai_readonly -v Password=REPLACE_ME
+```
+
+It grants `SELECT` on all `dbo.Dim*` / `dbo.Fact*` tables. Then set the four
+`AI_SQL_*` values in `.env` to match that login and database.
 
 ### Backend endpoint
 
@@ -109,8 +205,10 @@ Example response shape:
 ```json
 {
   "question": "Show top 10 Level2 elements by total cost",
-  "generated_sql": "SELECT TOP 10 L2Name, TotalCost FROM stg.Level2 ORDER BY TotalCost DESC",
+  "generated_sql": "SELECT TOP 10 e.L2Name, SUM(f.TotalCost) AS TotalCost FROM dbo.FactElementCostL2 f JOIN dbo.DimElementL2 e ON e.ElementL2Key = f.elementL2Key GROUP BY e.L2Name ORDER BY TotalCost DESC",
   "row_count": 10,
+  "truncated": false,
+  "answer_text": "...",
   "rows": [
     {
       "L2Name": "Frame",
@@ -120,13 +218,16 @@ Example response shape:
 }
 ```
 
-### Safety guardrails
+### AI assistant security model
 
-The AI endpoint is read-only by design:
+Four layers protect the company database:
 
-- single SQL statement only
-- SQL must start with `SELECT`
-- mutating/DDL keywords are blocked (`INSERT`, `UPDATE`, `DELETE`, `DROP`, etc.)
+1. **sqlglot parse (T-SQL)** — only a single `SELECT` / `WITH ... SELECT` is accepted; `INTO`, DML/DDL, and non-allowlisted functions (e.g. `OPENROWSET`) are rejected. Unparseable SQL is rejected.
+2. **Warehouse allowlist** — queries may only reference `dbo.Dim*` and `dbo.Fact*` (committed knowledge-base data). Staging (`stg.*`), BI views, and system tables are rejected. Report generation continues to use staging separately.
+3. **Row cap + timeout** — missing or excessive `TOP` is rewritten to `TOP 500` (configurable); the AI connection uses a query timeout; responses include `truncated: true` when capped.
+4. **Dedicated read-only SQL login** — execution uses `AI_SQL_*` credentials with `SELECT` on Dim/Fact only. There is no fallback to the ingestion / Trusted_Connection login.
+
+Smoke-check after creating the login: confirm the AI user can `SELECT` from Dim/Fact and cannot read `stg.*` or run writes.
 
 ### Frontend usage
 
@@ -135,19 +236,20 @@ The React app includes a dedicated **AI QS Assistant** page where users can:
 - enter natural-language questions
 - submit the question with the enter button
 - inspect generated SQL and returned rows
+- see a note when results are truncated
 
 ### Suggested query options
 
-Examples you can ask in AI QS Assistant:
+Examples you can ask in AI QS Assistant (committed Dim/Fact data):
 
-- Show top 10 Level2 elements by total cost.
-- What is the average TotalCost by L1Name?
-- Show TotalCost by SectorName for committed batches.
-- Which Level2 elements have the highest average Rate?
-- List validation error counts by ErrorType and Severity.
-- Compare CostPerM2 by ProjectName and SectorName.
-- Show projects where GIFA is above 3000 and CostPerM2 is above 12000.
-- Show tenderers ranked by FinalAdjustedTenderSum.
+- List projects and their sector names.
+- Show top 10 Level2 elements by total cost across cost sets.
+- What is the average GIFA by sector?
+- Which projects have the highest grand total?
+- Compare measured works vs building works estimate by project.
+- Show cost per m2 by project (TotalCost / GIFA).
+- List locations and how many projects sit in each.
+- Show adjustment amounts by AdjCategory.
 
 ## AI Report Draft Endpoint
 
@@ -191,6 +293,8 @@ Example response shape:
 }
 ```
 
+Saved report drafts and generated Word/PDF exports are written under the configured data directory (default `data/` at the repo root: `data/saved_drafts/` and `data/exports/`). Override with `DATA_DIR` in `.env` (relative to the repo root, or absolute). Templates and branding assets remain under `backend/app/reporting/`.
+
 ## Backend API
 
 Current backend endpoints:
@@ -203,7 +307,9 @@ Current backend endpoints:
 - `GET /api/batches/{load_batch_id}/download-errors`
 - `POST /api/ai/query`
 - `POST /api/ai/report-draft`
-- `POST /api/superset/guest-token`
+- `POST /api/ai/report-draft/save`
+- `POST /api/ai/report-export/docx`
+- `POST /api/ai/report-export/pdf`
 
 ## How To Test The Backend
 
@@ -268,149 +374,68 @@ curl -X POST "http://127.0.0.1:8001/api/ai/report-draft" `
 - `project_id` is the preferred key for `POST /api/ai/report-draft`; backend resolves the latest matching batch.
 - Validation errors can be inspected via JSON endpoints or downloaded as CSV.
 - `error-rows` includes `RowData` for row-level troubleshooting and mapped SUMMARY cell references when available.
-- AI query endpoint is read-only and enforces single-statement `SELECT` SQL generation.
-- The ingestion engine lives in `ingestion_engine/excel_file_ingestion.py`.
+- AI query endpoint uses parsed SQL, a Dim/Fact warehouse allowlist, a row cap, and a dedicated read-only login (see AI assistant security model).
+- Excel ingestion is implemented under `ingestion_engine/` (`workbook/`, `validation/`, `staging/`, `pipeline.py`). `excel_file_ingestion.py` is a thin compatibility façade; CLI: `python -m benchmarking.ingest path/to/file.xlsx`.
 - The frontend scaffold is present but backend-first development is the current focus.
 
-## Apache Superset Service (Dockerized)
+## Power BI reporting (Fact / Dim)
 
-Superset runs as an isolated sidecar service so it can evolve independently from the
-existing FastAPI and React runtime.
+Power BI connects to **committed warehouse** data (`dbo.Dim*` / `dbo.Fact*`) via curated
+`dbo.vw_BI_*` views. This is separate from the AI SQL assistant login and from staging
+(used only for AI report drafts of the latest project).
 
-### Why separate service
+### 1) Create / refresh reporting views
 
-- avoids dependency conflicts with the backend virtual environment
-- keeps BI runtime concerns (cache/worker/metadata) outside app API code
-- enables embedded dashboards without changing ingestion pipeline behavior
-
-### Files
-
-- `docker/superset/docker-compose.superset.yml`
-- `docker/superset/Dockerfile`
-- `docker/superset/superset_config.py`
-- `docker/superset/bootstrap.sh`
-- `docker/superset/.env.example`
-- `database/schema/002_superset_reporting_views.sql`
-
-### 1) First-time setup
-
-From repository root:
+After Dim/Fact tables exist (e.g. after a successful commit):
 
 ```powershell
-cd docker/superset
-copy .env.example .env
+sqlcmd -S YOUR_SERVER\INSTANCE -d YOUR_DATABASE -E -i database/schema/002_reporting_views.sql
 ```
 
-Edit `.env` values before startup:
+Views:
 
-- `SUPERSET_SECRET_KEY`
-- `SUPERSET_DB_PASSWORD`
-- `SUPERSET_ADMIN_PASSWORD`
-- `SQLSERVER_USERNAME` and `SQLSERVER_PASSWORD` (read-only SQL login)
+| View | Contents |
+|------|----------|
+| `dbo.vw_BI_ProjectOverview` | Project + sector + location + current cost set |
+| `dbo.vw_BI_Level2CostBreakdown` | L1/L2 element costs (with optional cost/m²) |
+| `dbo.vw_BI_AdjustmentSummary` | Cost adjustments by category / subtype |
+| `dbo.vw_BI_CostSetSummary` | Measured works / grand total style totals |
 
-### 2) Start Superset stack
+### 2) Create the Power BI read-only login
 
 ```powershell
-cd docker/superset
-docker compose -f docker-compose.superset.yml up -d --build
+sqlcmd -S YOUR_SERVER\INSTANCE -d YOUR_DATABASE -E -i database/security/002_pbi_readonly_login.sql -v LoginName=pbi_readonly -v Password=REPLACE_ME
 ```
 
-Superset URL:
+Grants `SELECT` on all `dbo.Dim*` / `dbo.Fact*` tables and on `dbo.vw_BI_*` views.
+Does **not** grant `stg.*`. Use a different password from `ai_readonly`.
 
-- `http://127.0.0.1:8088`
+### 3) Connect Power BI Desktop
 
-### 3) Health checks
+1. Get data → **SQL Server**.
+2. Server: your instance (e.g. `PRISCILLA_BAIYA\SQLEXPRESS`); Database: your DB.
+3. Data Connectivity mode: **Import** (typical) or **DirectQuery**.
+4. Authentication: **Database** → user `pbi_readonly` and the password you set.
+5. Select the four `vw_BI_*` views first (recommended). Advanced authors can also load Dim/Fact tables.
 
-Service-level checks:
+### 4) Suggested model
 
-```powershell
-cd docker/superset
-docker compose -f docker-compose.superset.yml ps
-docker compose -f docker-compose.superset.yml logs superset --tail 80
-docker compose -f docker-compose.superset.yml logs superset-worker --tail 80
-```
+- Start with the views as ready-made star slices (keys such as `ProjectKey`, `CostSetKey`, `ElementL2Key` are included for relationships).
+- Or load `DimProject`, `DimCostSet`, `DimElementL2`, `DimSector`, `DimLocation` as dimensions and relate them to fact views / tables on those keys.
+- Prefer filtering `CostSetIsCurrent = 1` (or `IsCurrent = 1` on `DimCostSet`) when analysing the current cost set only.
 
-HTTP check:
+### 5) Power BI Service (optional)
 
-```powershell
-curl http://127.0.0.1:8088/health
-```
-
-### 4) Configure SQL Server data source in Superset
-
-In Superset UI:
-
-1. Settings -> Database Connections -> + Database.
-2. Use SQLAlchemy URI:
-
-```text
-mssql+pyodbc://<SQLSERVER_USERNAME>:<SQLSERVER_PASSWORD>@<SQLSERVER_HOST>:<SQLSERVER_PORT>/<SQLSERVER_DATABASE>?driver=ODBC+Driver+18+for+SQL+Server&Encrypt=yes&TrustServerCertificate=yes
-```
-
-3. Test connection and save.
-
-Recommended: grant this SQL user read-only access to BI views (not full table write access).
-
-### 5) Curated datasets for dashboards
-
-Run:
-
-- `database/schema/002_superset_reporting_views.sql`
-
-Then add these views as Superset datasets:
-
-- `dbo.vw_BI_ProjectOverview`
-- `dbo.vw_BI_TenderReview`
-- `dbo.vw_BI_Level2CostBreakdown`
-- `dbo.vw_BI_AdjustmentSummary`
-
-### 6) Embed dashboards into the React app
-
-Backend endpoint:
-
-- `POST /api/superset/guest-token`
-
-Required backend env vars:
-
-- `SUPERSET_URL` (for example `http://127.0.0.1:8088`)
-- `SUPERSET_API_USERNAME`
-- `SUPERSET_API_PASSWORD`
-- `SUPERSET_DEFAULT_DASHBOARD_ID`
-
-Frontend behavior:
-
-- Analytics tab auto-loads the configured default dashboard
-- guest token fetched from FastAPI
-- dashboard rendered with `@superset-ui/embedded-sdk`
-
-### 7) Stop/reset
-
-Stop containers:
-
-```powershell
-cd docker/superset
-docker compose -f docker-compose.superset.yml down
-```
-
-Reset stack including metadata (destructive):
-
-```powershell
-cd docker/superset
-docker compose -f docker-compose.superset.yml down -v
-```
-
-### 8) Backups and secrets
-
-- Metadata persistence lives in `superset_db_data` Docker volume.
-- Backup strategy: periodic `pg_dump` from `superset-postgres` container.
-- Do not commit `.env` with live secrets.
-- Rotate Superset admin and SQL credentials periodically.
+To refresh in the Power BI Service against on-premises SQL Server, install an **on-premises data gateway** and map the dataset credentials to `pbi_readonly`. Gateway setup is environment-specific and not scripted in this repo.
 
 ## Structure
 
 ```text
 cost-benchmarking-poc/
+├── pyproject.toml
+├── uv.lock
 ├── requirements.txt
+├── requirements-dev.txt
 ├── frontend/
 │   ├── src/
 │   │   ├── api/
@@ -429,7 +454,14 @@ cost-benchmarking-poc/
 │   │   ├── repositories/
 │   │   └── schemas/
 ├── ingestion_engine/
+│   ├── config.py
+│   ├── pipeline.py
+│   ├── workbook/
+│   ├── validation/
+│   ├── staging/
 │   └── excel_file_ingestion.py
+├── benchmarking/
+│   └── ingest.py
 ├── database/
 │   ├── schema/
 │   └── procedures/

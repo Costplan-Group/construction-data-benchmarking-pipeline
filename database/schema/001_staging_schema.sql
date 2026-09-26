@@ -56,9 +56,17 @@ BEGIN
         ErrorMessage NVARCHAR(1000) NOT NULL,
         Severity NVARCHAR(20) NOT NULL,
         CreatedAt DATETIME2(0) NOT NULL CONSTRAINT DF_ValidationError_CreatedAt DEFAULT (SYSUTCDATETIME()),
+        RowDataJson NVARCHAR(MAX) NULL,
         CONSTRAINT FK_ValidationError_LoadBatch
             FOREIGN KEY (LoadBatchID) REFERENCES stg.LoadBatch (LoadBatchID)
     );
+END;
+GO
+
+IF COL_LENGTH('stg.ValidationError', 'RowDataJson') IS NULL
+   AND OBJECT_ID('stg.ValidationError', 'U') IS NOT NULL
+BEGIN
+    ALTER TABLE stg.ValidationError ADD RowDataJson NVARCHAR(MAX) NULL;
 END;
 GO
 
@@ -193,6 +201,54 @@ BEGIN
         CONSTRAINT FK_Adjustments_LoadBatch
             FOREIGN KEY (LoadBatchID) REFERENCES stg.LoadBatch (LoadBatchID)
     );
+END;
+GO
+
+IF OBJECT_ID('stg.ProjectTenderer', 'U') IS NULL
+BEGIN
+    CREATE TABLE stg.ProjectTenderer (
+        StageProjectTendererID BIGINT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+        LoadBatchID UNIQUEIDENTIFIER NOT NULL,
+        RowNum INT NOT NULL,
+        SourceFileName NVARCHAR(260) NULL,
+        TendererLabel NVARCHAR(255) NULL,
+        TendererName NVARCHAR(255) NULL,
+        IsSelected BIT NOT NULL CONSTRAINT DF_ProjectTenderer_IsSelected DEFAULT (0),
+        FinalAdjustedTenderSum DECIMAL(18,2) NULL,
+        VarianceToBudget DECIMAL(18,2) NULL,
+        ConstructionBudget DECIMAL(18,2) NULL,
+        CONSTRAINT FK_ProjectTenderer_LoadBatch
+            FOREIGN KEY (LoadBatchID) REFERENCES stg.LoadBatch (LoadBatchID)
+    );
+END;
+GO
+
+-- Rename legacy VarianceToCostplan -> VarianceToBudget when upgrading existing DBs.
+IF COL_LENGTH('stg.ProjectTenderer', 'VarianceToCostplan') IS NOT NULL
+   AND COL_LENGTH('stg.ProjectTenderer', 'VarianceToBudget') IS NULL
+BEGIN
+    EXEC sp_rename 'stg.ProjectTenderer.VarianceToCostplan', 'VarianceToBudget', 'COLUMN';
+END;
+GO
+
+IF COL_LENGTH('stg.ProjectTenderer', 'FinalAdjustedTenderSum') IS NULL
+   AND OBJECT_ID('stg.ProjectTenderer', 'U') IS NOT NULL
+BEGIN
+    ALTER TABLE stg.ProjectTenderer ADD FinalAdjustedTenderSum DECIMAL(18,2) NULL;
+END;
+GO
+
+IF COL_LENGTH('stg.ProjectTenderer', 'VarianceToBudget') IS NULL
+   AND OBJECT_ID('stg.ProjectTenderer', 'U') IS NOT NULL
+BEGIN
+    ALTER TABLE stg.ProjectTenderer ADD VarianceToBudget DECIMAL(18,2) NULL;
+END;
+GO
+
+IF COL_LENGTH('stg.ProjectTenderer', 'ConstructionBudget') IS NULL
+   AND OBJECT_ID('stg.ProjectTenderer', 'U') IS NOT NULL
+BEGIN
+    ALTER TABLE stg.ProjectTenderer ADD ConstructionBudget DECIMAL(18,2) NULL;
 END;
 GO
 
