@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from typing import Any
@@ -11,6 +12,11 @@ import pyodbc
 from ingestion_engine.config import get_ingestion_config
 
 ConnectionFactory = Callable[[], Any]
+
+
+def _is_lock_timeout(exc: BaseException) -> bool:
+    text = str(exc)
+    return "1222" in text or "Lock request time out period exceeded" in text
 
 
 class Database:
@@ -52,8 +58,10 @@ class Database:
             raise ValueError("Database requires connection_string or connection_factory.")
         conn = pyodbc.connect(self._connection_string)
         cur = conn.cursor()
-        cur.execute(f"SET LOCK_TIMEOUT {self._lock_timeout_ms}")
-        cur.close()
+        try:
+            cur.execute(f"SET LOCK_TIMEOUT {self._lock_timeout_ms}")
+        finally:
+            cur.close()
         return conn
 
     def _acquire(self) -> tuple[Any, bool]:
@@ -65,36 +73,75 @@ class Database:
     def execute(self, sql: str, params: Any = None, *, commit: bool | None = None) -> None:
         should_commit = (not self._in_transaction) if commit is None else commit
         conn, should_close = self._acquire()
+        cur = None
         try:
             cur = conn.cursor()
             if params is not None:
                 cur.execute(sql, params)
             else:
                 cur.execute(sql)
-            cur.close()
             if should_commit:
                 conn.commit()
         finally:
+            if cur is not None:
+                try:
+                    cur.close()
+                except Exception:
+                    pass
             if should_close and not self._in_transaction:
                 conn.close()
 
+    def execute_with_lock_retry(
+        self,
+        sql: str,
+        params: Any = None,
+        *,
+        commit: bool | None = None,
+        attempts: int = 3,
+    ) -> None:
+        """Retry short UPDATEs that hit SQL Server lock timeout 1222."""
+        last_exc: BaseException | None = None
+        for attempt in range(attempts):
+            try:
+                self.execute(sql, params, commit=commit)
+                return
+            except pyodbc.ProgrammingError as exc:
+                last_exc = exc
+                if not _is_lock_timeout(exc) or attempt == attempts - 1:
+                    raise
+                self.rollback()
+                time.sleep(0.5 * (attempt + 1))
+            except pyodbc.Error as exc:
+                last_exc = exc
+                if not _is_lock_timeout(exc) or attempt == attempts - 1:
+                    raise
+                self.rollback()
+                time.sleep(0.5 * (attempt + 1))
+        if last_exc is not None:
+            raise last_exc
+
     def fetch_one(self, sql: str, params: Any = None) -> Any:
         conn, should_close = self._acquire()
+        cur = None
         try:
             cur = conn.cursor()
             if params is not None:
                 cur.execute(sql, params)
             else:
                 cur.execute(sql)
-            row = cur.fetchone()
-            cur.close()
-            return row
+            return cur.fetchone()
         finally:
+            if cur is not None:
+                try:
+                    cur.close()
+                except Exception:
+                    pass
             if should_close and not self._in_transaction:
                 conn.close()
 
     def fetch_all(self, sql: str, params: Any = None) -> list[dict]:
         conn, should_close = self._acquire()
+        cur = None
         try:
             cur = conn.cursor()
             if params is not None:
@@ -103,9 +150,13 @@ class Database:
                 cur.execute(sql)
             columns = [c[0] for c in cur.description] if cur.description else []
             rows = cur.fetchall()
-            cur.close()
             return [dict(zip(columns, row, strict=False)) for row in rows]
         finally:
+            if cur is not None:
+                try:
+                    cur.close()
+                except Exception:
+                    pass
             if should_close and not self._in_transaction:
                 conn.close()
 
@@ -115,7 +166,10 @@ class Database:
 
     def rollback(self) -> None:
         if self._conn is not None:
-            self._conn.rollback()
+            try:
+                self._conn.rollback()
+            except Exception:
+                pass
 
     def close(self) -> None:
         if self._conn is not None:

@@ -29,16 +29,29 @@ def insert_dataframe_rows(conn, table_name: str, rows: list[dict], *, commit: bo
         msg = str(exc)
         if "HY090" not in msg:
             raise
+        try:
+            cur.close()
+        except Exception:
+            pass
         cur = conn.cursor()
-        cur.fast_executemany = False
-        cur.executemany(sql, values)
-        if commit:
-            conn.commit()
+        try:
+            cur.fast_executemany = False
+            cur.executemany(sql, values)
+            if commit:
+                conn.commit()
+        finally:
+            cur.close()
+    finally:
+        try:
+            cur.close()
+        except Exception:
+            pass
 
 
 def get_decimal_metadata(table_full_name: str, connection_factory) -> dict[str, tuple[int, int]]:
     schema, table = table_full_name.split(".")
     conn = connection_factory()
+    cur = None
     try:
         cur = conn.cursor()
         cur.execute(
@@ -56,4 +69,9 @@ def get_decimal_metadata(table_full_name: str, connection_factory) -> dict[str, 
             out[str(row[0])] = (int(row[1]), int(row[2]))
         return out
     finally:
+        if cur is not None:
+            try:
+                cur.close()
+            except Exception:
+                pass
         conn.close()

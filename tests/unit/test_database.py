@@ -56,3 +56,31 @@ def test_database_from_config():
     ):
         db = Database.from_config(connection_factory=MagicMock)
         assert db._connection_string
+
+
+def test_execute_closes_cursor_on_failure():
+    conn, cur = _fake_conn()
+    cur.execute.side_effect = RuntimeError("boom")
+    db = Database(connection_factory=lambda: conn)
+
+    with pytest.raises(RuntimeError, match="boom"):
+        db.execute("SELECT 1")
+
+    cur.close.assert_called()
+    conn.close.assert_called()
+
+
+def test_execute_with_lock_retry_then_succeeds():
+    import pyodbc
+
+    conn, cur = _fake_conn()
+    lock_exc = pyodbc.ProgrammingError("1222", "Lock request time out period exceeded.")
+    cur.execute.side_effect = [lock_exc, None]
+    db = Database(connection_factory=lambda: conn)
+    db.open()
+
+    with patch("ingestion_engine.database.time.sleep"):
+        db.execute_with_lock_retry("UPDATE stg.LoadBatch SET ErrorCount = 0", attempts=3)
+
+    assert cur.execute.call_count == 2
+    conn.rollback.assert_called()

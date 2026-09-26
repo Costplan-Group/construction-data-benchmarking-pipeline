@@ -59,13 +59,6 @@ async def run_ingestion_from_upload(upload: UploadFile) -> dict:
         get_decimal_metadata=ingestion._get_decimal_metadata,
         resolve_sector_code=ingestion.resolve_sector_code,
         fetch_all=ingestion.fetch_all,
-        log_validation_error=ingestion.log_validation_error,
-        create_load_batch=ingestion.create_load_batch,
-        update_batch_status=ingestion.update_batch_status,
-        update_batch_error_count=ingestion.update_batch_error_count,
-        get_error_count=ingestion.get_error_count,
-        run_sql_validation=ingestion.run_sql_validation,
-        run_sql_commit=ingestion.run_sql_commit,
     )
 
     def _run():

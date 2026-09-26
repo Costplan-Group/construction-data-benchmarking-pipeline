@@ -108,6 +108,7 @@ jobs:
           SQL_DB: Benchmarking
           SQL_UID: sa
           SQL_DRIVER: ODBC Driver 18 for SQL Server
+          DB_LOCK_TIMEOUT_MS: "60000"
         run: pytest -m integration -v
 
   frontend:

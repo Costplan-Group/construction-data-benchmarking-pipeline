@@ -33,7 +33,7 @@ class LoadBatchRepository:
 
     def update_status(self, load_batch_id: str, status: str | BatchStatus) -> None:
         status_value = status.value if isinstance(status, BatchStatus) else status
-        self._db.execute(
+        self._db.execute_with_lock_retry(
             """
             UPDATE stg.LoadBatch
             SET BatchStatus = ?
@@ -43,7 +43,7 @@ class LoadBatchRepository:
         )
 
     def update_error_count(self, load_batch_id: str) -> None:
-        self._db.execute(
+        self._db.execute_with_lock_retry(
             """
             UPDATE lb
             SET ErrorCount = x.ErrorCount

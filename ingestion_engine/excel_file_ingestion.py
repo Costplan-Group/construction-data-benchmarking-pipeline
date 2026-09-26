@@ -110,6 +110,8 @@ def log_validation_error(
     error_message: str = "",
     severity: str = "ERROR",
     row_data: dict | None = None,
+    *,
+    use_row_data_column: bool = True,
 ):
     _validation_error_repo().log(
         load_batch_id=load_batch_id,
@@ -120,7 +122,7 @@ def log_validation_error(
         error_message=error_message,
         severity=severity,
         row_data=row_data,
-        use_row_data_column=True,
+        use_row_data_column=use_row_data_column,
     )
 
 
@@ -174,6 +176,8 @@ def get_batch_error_details(load_batch_id: str) -> list[dict]:
 
 
 def _default_pipeline() -> IngestionPipeline:
+    # Keep batch/error/SQL ops on the pipeline Database so staging + validate/commit
+    # share one connection. Do not inject façade helpers that open separate connections.
     return IngestionPipeline(
         connection_factory=get_connection,
         database_factory=lambda: module_db(connection_factory=get_connection),
@@ -181,13 +185,6 @@ def _default_pipeline() -> IngestionPipeline:
         get_decimal_metadata=_get_decimal_metadata,
         resolve_sector_code=resolve_sector_code,
         fetch_all=fetch_all,
-        log_validation_error=log_validation_error,
-        create_load_batch=create_load_batch,
-        update_batch_status=update_batch_status,
-        update_batch_error_count=update_batch_error_count,
-        get_error_count=get_error_count,
-        run_sql_validation=run_sql_validation,
-        run_sql_commit=run_sql_commit,
     )
 
 

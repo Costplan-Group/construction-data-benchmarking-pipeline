@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import logging
 import traceback
 from collections.abc import Callable
 
@@ -13,6 +14,8 @@ from ingestion_engine.results import IngestionResult
 from ingestion_engine.staging.orchestrator import stage_all_sheets
 from ingestion_engine.validation.report import validate_workbook_data
 from ingestion_engine.workbook.reader import WorkbookReader
+
+logger = logging.getLogger(__name__)
 
 
 class IngestionPipeline:
@@ -78,22 +81,19 @@ class IngestionPipeline:
         try:
             dataframes = self.workbook_reader.read(excel_stream)
 
-            validate_workbook_data(load_batch_id, dataframes, error_repo=error_repo)
-            db.commit()
+            with db.transaction():
+                validate_workbook_data(load_batch_id, dataframes, error_repo=error_repo)
+                initial_errors = count_errors(load_batch_id)
+                update_error_count(load_batch_id)
 
-            initial_errors = count_errors(load_batch_id)
-            update_error_count(load_batch_id)
-            db.commit()
-
-            if initial_errors > 0:
-                update_status(load_batch_id, BatchStatus.FAILED)
-                db.commit()
-                return IngestionResult(
-                    load_batch_id=load_batch_id,
-                    status=BatchStatus.FAILED,
-                    error_count=initial_errors,
-                    source_file_name=source_file_name,
-                )
+                if initial_errors > 0:
+                    update_status(load_batch_id, BatchStatus.FAILED)
+                    return IngestionResult(
+                        load_batch_id=load_batch_id,
+                        status=BatchStatus.FAILED,
+                        error_count=initial_errors,
+                        source_file_name=source_file_name,
+                    )
 
             insert_fn = self.insert_rows
             decimal_meta_fn = self.get_decimal_metadata
@@ -125,22 +125,20 @@ class IngestionPipeline:
                 sql_validate(load_batch_id)
                 sql_commit(load_batch_id)
 
-            final_errors = count_errors(load_batch_id)
-            update_error_count(load_batch_id)
-            db.commit()
+                final_errors = count_errors(load_batch_id)
+                update_error_count(load_batch_id)
 
-            if final_errors > 0:
-                update_status(load_batch_id, BatchStatus.FAILED)
-                db.commit()
-                return IngestionResult(
-                    load_batch_id=load_batch_id,
-                    status=BatchStatus.FAILED,
-                    error_count=final_errors,
-                    source_file_name=source_file_name,
-                )
+                if final_errors > 0:
+                    update_status(load_batch_id, BatchStatus.FAILED)
+                    return IngestionResult(
+                        load_batch_id=load_batch_id,
+                        status=BatchStatus.FAILED,
+                        error_count=final_errors,
+                        source_file_name=source_file_name,
+                    )
 
-            update_status(load_batch_id, BatchStatus.COMMITTED)
-            db.commit()
+                update_status(load_batch_id, BatchStatus.COMMITTED)
+
             return IngestionResult(
                 load_batch_id=load_batch_id,
                 status=BatchStatus.COMMITTED,
@@ -148,25 +146,37 @@ class IngestionPipeline:
                 source_file_name=source_file_name,
             )
 
-        except Exception as e:
-            error_message = f"{type(e).__name__}: {str(e)}"
-            log_error(
-                load_batch_id=load_batch_id,
-                sheet_name=None,
-                row_num=None,
-                column_name=None,
-                error_type=ErrorType.EXCEPTION.value,
-                error_message=error_message + " | " + traceback.format_exc()[:700],
-                severity=Severity.ERROR.value,
-                use_row_data_column=True,
-            )
-            update_error_count(load_batch_id)
-            update_status(load_batch_id, BatchStatus.FAILED)
-            db.commit()
+        except Exception as exc:
+            error_message = f"{type(exc).__name__}: {exc}"
+            db.rollback()
+            try:
+                log_error(
+                    load_batch_id=load_batch_id,
+                    sheet_name=None,
+                    row_num=None,
+                    column_name=None,
+                    error_type=ErrorType.EXCEPTION.value,
+                    error_message=error_message + " | " + traceback.format_exc()[:700],
+                    severity=Severity.ERROR.value,
+                    use_row_data_column=True,
+                )
+                update_error_count(load_batch_id)
+                update_status(load_batch_id, BatchStatus.FAILED)
+                db.commit()
+            except Exception:
+                logger.exception(
+                    "Could not persist ingestion exception for batch %s", load_batch_id
+                )
+
+            try:
+                error_count = count_errors(load_batch_id)
+            except Exception:
+                error_count = 1
+
             return IngestionResult(
                 load_batch_id=load_batch_id,
                 status=BatchStatus.FAILED,
-                error_count=count_errors(load_batch_id),
+                error_count=error_count,
                 exception=error_message,
                 source_file_name=source_file_name,
             )
