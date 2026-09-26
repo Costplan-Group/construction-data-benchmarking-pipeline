@@ -23,7 +23,12 @@ def test_ingestion_result_as_dict():
 
 
 def test_module_db_and_get_connection():
-    cfg = IngestionConfig(sql_server="S", sql_db="D", _env_file=None)
+    cfg = IngestionConfig(
+        sql_server="S",
+        sql_db="D",
+        sql_trusted_connection=True,
+        _env_file=None,
+    )
     with patch("ingestion_engine.connection.get_ingestion_config", return_value=cfg):
         db = module_db(connection_factory=MagicMock)
         assert db._connection_string

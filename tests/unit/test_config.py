@@ -35,6 +35,19 @@ def test_connection_string_explicit_and_trusted():
     assert "SERVER=LOCAL" in cs
     assert "DATABASE=DemoDB" in cs
     assert "Trusted_Connection=yes" in cs
+    assert "UID=" not in cs
+
+    # Trusted mode must not require credentials even if UID/PWD are present.
+    trusted_with_uid = IngestionConfig(
+        sql_server="LOCAL",
+        sql_db="DemoDB",
+        sql_trusted_connection=True,
+        sql_uid="sa",
+        sql_pwd="",
+        _env_file=None,
+    )
+    assert "Trusted_Connection=yes" in trusted_with_uid.connection_string
+    assert "UID=" not in trusted_with_uid.connection_string
 
 
 def test_connection_string_sql_auth_and_encrypt():
@@ -53,9 +66,25 @@ def test_connection_string_sql_auth_and_encrypt():
     assert "Encrypt=yes" in cs
 
 
+def test_connection_string_sql_auth_requires_credentials():
+    with pytest.raises(ValueError, match="SQL_UID and SQL_PWD"):
+        _ = IngestionConfig(
+            sql_server="S",
+            sql_db="D",
+            sql_trusted_connection=False,
+            _env_file=None,
+        ).connection_string
+
+
 def test_connection_string_requires_server_db():
+    # Server/DB check must win over auth credential checks.
     with pytest.raises(ValueError, match="SQL_SERVER"):
-        _ = IngestionConfig(_env_file=None).connection_string
+        _ = IngestionConfig(
+            sql_server=None,
+            sql_db=None,
+            sql_trusted_connection=False,
+            _env_file=None,
+        ).connection_string
 
 
 def test_clear_ingestion_config_cache():

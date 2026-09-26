@@ -50,6 +50,7 @@ def test_database_from_config():
         return_value=IngestionConfig(
             sql_server="S",
             sql_db="D",
+            sql_trusted_connection=True,
             _env_file=None,
         ),
     ):

@@ -98,14 +98,12 @@ class IngestionConfig(BaseSettings):
             f"DATABASE={self.sql_db};",
         ]
 
-        use_trusted = self.sql_trusted_connection and not self.sql_uid
-        if use_trusted:
+        if self.sql_trusted_connection:
             parts.append("Trusted_Connection=yes;")
         else:
             if not self.sql_uid or not self.sql_pwd:
                 raise ValueError(
-                    "SQL auth requires SQL_UID and SQL_PWD when SQL_TRUSTED_CONNECTION "
-                    "is false or SQL_UID is set."
+                    "SQL auth requires SQL_UID and SQL_PWD when SQL_TRUSTED_CONNECTION is false."
                 )
             parts.append(f"UID={self.sql_uid};")
             parts.append(f"PWD={self.sql_pwd};")
