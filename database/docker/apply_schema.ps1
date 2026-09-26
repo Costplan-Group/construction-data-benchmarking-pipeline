@@ -1,4 +1,4 @@
-# Apply staging schema, procedures, and DimLocation seed to Docker SQL Server.
+# Apply staging schema, procedures, and DimLocation / DimSector seeds to Docker SQL Server.
 # Prerequisites: docker compose up -d (container healthy), sqlcmd on PATH or use container sqlcmd.
 #
 # Usage (from repo root):
@@ -56,7 +56,8 @@ if (-not $SqlCmd) {
         (Join-Path $SchemaDir "001_staging_schema.sql"),
         (Join-Path $ProcDir "001_usp_ValidateBatch.sql"),
         (Join-Path $ProcDir "002_usp_CommitBatch.sql"),
-        (Join-Path $DockerDir "003_seed_dim_location.sql")
+        (Join-Path $DockerDir "003_seed_dim_location.sql"),
+        (Join-Path $DockerDir "004_seed_dim_sector.sql")
     )
     foreach ($file in $files) {
         $leaf = Split-Path $file -Leaf
@@ -81,4 +82,5 @@ Invoke-SqlFile -SqlCmdPath $SqlCmd -FilePath (Join-Path $SchemaDir "001_staging_
 Invoke-SqlFile -SqlCmdPath $SqlCmd -FilePath (Join-Path $ProcDir "001_usp_ValidateBatch.sql")
 Invoke-SqlFile -SqlCmdPath $SqlCmd -FilePath (Join-Path $ProcDir "002_usp_CommitBatch.sql")
 Invoke-SqlFile -SqlCmdPath $SqlCmd -FilePath (Join-Path $DockerDir "003_seed_dim_location.sql")
+Invoke-SqlFile -SqlCmdPath $SqlCmd -FilePath (Join-Path $DockerDir "004_seed_dim_sector.sql")
 Write-Host "Schema apply complete."

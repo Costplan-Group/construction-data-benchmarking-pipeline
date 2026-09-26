@@ -42,7 +42,10 @@ def test_sample_workbook_commits_with_expected_staging_counts(db_connection):
 
     result = process_local_file(str(SAMPLE_WORKBOOK))
 
-    assert result.status == BatchStatus.COMMITTED
+    assert result.status == BatchStatus.COMMITTED, (
+        f"expected COMMITTED, got {result.status}; "
+        f"error_count={result.error_count}; exception={result.exception}"
+    )
     assert result.error_count == 0
     assert result.load_batch_id
 

@@ -62,7 +62,7 @@ Unit and characterization tests need no database. Optional end-to-end tests run 
 # 1) Start SQL Server
 docker compose up -d
 
-# 2) Apply staging schema, procedures, and DimLocation seed
+# 2) Apply staging schema, procedures, and DimLocation / DimSector seeds
 .\database\docker\apply_schema.ps1
 
 # 3) Run integration tests only
