@@ -14,11 +14,6 @@ from ingestion_engine.config import get_ingestion_config
 ConnectionFactory = Callable[[], Any]
 
 
-def _is_lock_timeout(exc: BaseException) -> bool:
-    text = str(exc)
-    return "1222" in text or "Lock request time out period exceeded" in text
-
-
 class Database:
     """
     Thin pyodbc wrapper.
@@ -58,10 +53,8 @@ class Database:
             raise ValueError("Database requires connection_string or connection_factory.")
         conn = pyodbc.connect(self._connection_string)
         cur = conn.cursor()
-        try:
-            cur.execute(f"SET LOCK_TIMEOUT {self._lock_timeout_ms}")
-        finally:
-            cur.close()
+        cur.execute(f"SET LOCK_TIMEOUT {self._lock_timeout_ms}")
+        cur.close()
         return conn
 
     def _acquire(self) -> tuple[Any, bool]:
@@ -73,21 +66,16 @@ class Database:
     def execute(self, sql: str, params: Any = None, *, commit: bool | None = None) -> None:
         should_commit = (not self._in_transaction) if commit is None else commit
         conn, should_close = self._acquire()
-        cur = None
         try:
             cur = conn.cursor()
             if params is not None:
                 cur.execute(sql, params)
             else:
                 cur.execute(sql)
+            cur.close()
             if should_commit:
                 conn.commit()
         finally:
-            if cur is not None:
-                try:
-                    cur.close()
-                except Exception:
-                    pass
             if should_close and not self._in_transaction:
                 conn.close()
 
@@ -97,51 +85,59 @@ class Database:
         params: Any = None,
         *,
         commit: bool | None = None,
-        attempts: int = 3,
+        attempts: int = 5,
+        base_delay: float = 0.25,
     ) -> None:
-        """Retry short UPDATEs that hit SQL Server lock timeout 1222."""
-        last_exc: BaseException | None = None
+        """
+        Execute SQL with retry for transient lock timeouts (1222, 1205).
+
+        Retries with exponential backoff; rolls back on lock timeout before retrying.
+        """
+        last_exc: Exception | None = None
+
         for attempt in range(attempts):
             try:
                 self.execute(sql, params, commit=commit)
                 return
             except pyodbc.ProgrammingError as exc:
-                last_exc = exc
-                if not _is_lock_timeout(exc) or attempt == attempts - 1:
+                msg = str(exc)
+                # 1222 = Lock request time out period exceeded
+                # 1205 = Deadlock detected
+                if "1222" not in msg and "1205" not in msg:
                     raise
-                self.rollback()
-                time.sleep(0.5 * (attempt + 1))
-            except pyodbc.Error as exc:
+
                 last_exc = exc
-                if not _is_lock_timeout(exc) or attempt == attempts - 1:
+                if self._conn is not None:
+                    try:
+                        self.rollback()
+                    except Exception:
+                        pass
+
+                if attempt == attempts - 1:
                     raise
-                self.rollback()
-                time.sleep(0.5 * (attempt + 1))
+
+                time.sleep(base_delay * (2**attempt))
+
         if last_exc is not None:
             raise last_exc
 
     def fetch_one(self, sql: str, params: Any = None) -> Any:
         conn, should_close = self._acquire()
-        cur = None
         try:
             cur = conn.cursor()
             if params is not None:
                 cur.execute(sql, params)
             else:
                 cur.execute(sql)
-            return cur.fetchone()
+            row = cur.fetchone()
+            cur.close()
+            return row
         finally:
-            if cur is not None:
-                try:
-                    cur.close()
-                except Exception:
-                    pass
             if should_close and not self._in_transaction:
                 conn.close()
 
     def fetch_all(self, sql: str, params: Any = None) -> list[dict]:
         conn, should_close = self._acquire()
-        cur = None
         try:
             cur = conn.cursor()
             if params is not None:
@@ -150,13 +146,9 @@ class Database:
                 cur.execute(sql)
             columns = [c[0] for c in cur.description] if cur.description else []
             rows = cur.fetchall()
+            cur.close()
             return [dict(zip(columns, row, strict=False)) for row in rows]
         finally:
-            if cur is not None:
-                try:
-                    cur.close()
-                except Exception:
-                    pass
             if should_close and not self._in_transaction:
                 conn.close()
 
@@ -166,10 +158,7 @@ class Database:
 
     def rollback(self) -> None:
         if self._conn is not None:
-            try:
-                self._conn.rollback()
-            except Exception:
-                pass
+            self._conn.rollback()
 
     def close(self) -> None:
         if self._conn is not None:
