@@ -53,8 +53,10 @@ class Database:
             raise ValueError("Database requires connection_string or connection_factory.")
         conn = pyodbc.connect(self._connection_string)
         cur = conn.cursor()
-        cur.execute(f"SET LOCK_TIMEOUT {self._lock_timeout_ms}")
-        cur.close()
+        try:
+            cur.execute(f"SET LOCK_TIMEOUT {self._lock_timeout_ms}")
+        finally:
+            cur.close()
         return conn
 
     def _acquire(self) -> tuple[Any, bool]:
@@ -66,16 +68,21 @@ class Database:
     def execute(self, sql: str, params: Any = None, *, commit: bool | None = None) -> None:
         should_commit = (not self._in_transaction) if commit is None else commit
         conn, should_close = self._acquire()
+        cur = None
         try:
             cur = conn.cursor()
             if params is not None:
                 cur.execute(sql, params)
             else:
                 cur.execute(sql)
-            cur.close()
             if should_commit:
                 conn.commit()
         finally:
+            if cur is not None:
+                try:
+                    cur.close()
+                except Exception:
+                    pass
             if should_close and not self._in_transaction:
                 conn.close()
 
@@ -123,21 +130,26 @@ class Database:
 
     def fetch_one(self, sql: str, params: Any = None) -> Any:
         conn, should_close = self._acquire()
+        cur = None
         try:
             cur = conn.cursor()
             if params is not None:
                 cur.execute(sql, params)
             else:
                 cur.execute(sql)
-            row = cur.fetchone()
-            cur.close()
-            return row
+            return cur.fetchone()
         finally:
+            if cur is not None:
+                try:
+                    cur.close()
+                except Exception:
+                    pass
             if should_close and not self._in_transaction:
                 conn.close()
 
     def fetch_all(self, sql: str, params: Any = None) -> list[dict]:
         conn, should_close = self._acquire()
+        cur = None
         try:
             cur = conn.cursor()
             if params is not None:
@@ -146,9 +158,13 @@ class Database:
                 cur.execute(sql)
             columns = [c[0] for c in cur.description] if cur.description else []
             rows = cur.fetchall()
-            cur.close()
             return [dict(zip(columns, row, strict=False)) for row in rows]
         finally:
+            if cur is not None:
+                try:
+                    cur.close()
+                except Exception:
+                    pass
             if should_close and not self._in_transaction:
                 conn.close()
 
