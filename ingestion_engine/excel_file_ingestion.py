@@ -8,6 +8,7 @@ This module re-exports stable entry points for tests and backend services.
 from __future__ import annotations
 
 import io
+import logging
 import os
 
 from ingestion_engine.coercion import (  # noqa: F401
@@ -46,6 +47,8 @@ from ingestion_engine.validation.report import (
     validate_workbook_data as _validate_workbook_data_impl,
 )
 from ingestion_engine.workbook.aliases import SHEET_ALIASES, resolve_sheet_name  # noqa: F401
+
+logger = logging.getLogger(__name__)
 
 # ============================================================
 # DB HELPERS (patch points for characterization tests)
@@ -93,8 +96,12 @@ def _validation_error_repo():
     return ValidationErrorRepository(_module_db())
 
 
-def create_load_batch(file_name: str, source_file_path: str) -> str:
-    return _load_batch_repo().create(file_name, source_file_path)
+def create_load_batch(
+    file_name: str,
+    source_file_path: str,
+    content_hash: str | None = None,
+) -> str:
+    return _load_batch_repo().create(file_name, source_file_path, content_hash)
 
 
 def update_batch_status(load_batch_id: str, status: str | BatchStatus):
@@ -196,30 +203,57 @@ def _process_excel_stream(
 
 def process_local_file(local_file_path: str) -> IngestionResult:
     file_name = os.path.basename(local_file_path)
-    print(f"\nProcessing local file: {file_name}")
+    logger.info("Processing local file file=%s path=%s", file_name, local_file_path)
     with open(local_file_path, "rb") as f:
         excel_stream = io.BytesIO(f.read())
     result = _process_excel_stream(excel_stream, file_name, local_file_path)
-    if result.status == BatchStatus.COMMITTED:
-        print(f"COMMITTED: {file_name}")
-    else:
-        print(f"FAILED: {file_name}")
+    logger.info(
+        "Local ingestion finished load_batch_id=%s status=%s file=%s error_count=%s",
+        result.load_batch_id,
+        result.status.value if hasattr(result.status, "value") else result.status,
+        file_name,
+        result.error_count,
+        extra={
+            "load_batch_id": result.load_batch_id,
+            "source_file_name": file_name,
+            "status": (result.status.value if hasattr(result.status, "value") else result.status),
+            "error_count": result.error_count,
+        },
+    )
     return result
 
 
 def process_uploaded_file(file_name: str, file_bytes: bytes) -> IngestionResult:
+    logger.info("Processing upload file=%s bytes=%s", file_name, len(file_bytes))
     excel_stream = io.BytesIO(file_bytes)
-    return _process_excel_stream(excel_stream, file_name, f"upload://{file_name}")
+    result = _process_excel_stream(excel_stream, file_name, f"upload://{file_name}")
+    logger.info(
+        "Upload ingestion finished load_batch_id=%s status=%s file=%s error_count=%s",
+        result.load_batch_id,
+        result.status.value if hasattr(result.status, "value") else result.status,
+        file_name,
+        result.error_count,
+        extra={
+            "load_batch_id": result.load_batch_id,
+            "source_file_name": file_name,
+            "status": (result.status.value if hasattr(result.status, "value") else result.status),
+            "error_count": result.error_count,
+        },
+    )
+    return result
 
 
 def main():
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+    )
     local_path = get_ingestion_config().local_test_file_path
     if local_path:
         process_local_file(local_path)
         return
 
-    print("LOCAL_TEST_FILE_PATH is not set.")
-    print("Set LOCAL_TEST_FILE_PATH in your .env for manual file testing.")
+    logger.error("LOCAL_TEST_FILE_PATH is not set in .env for manual file testing.")
 
 
 if __name__ == "__main__":

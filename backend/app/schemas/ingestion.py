@@ -10,6 +10,8 @@ class IngestionRunResponse(BaseModel):
     error_count: int = 0
     source_file_name: str | None = None
     exception: str | None = None
+    content_hash: str | None = None
+    duplicate: bool = False
 
 
 class BatchSummaryResponse(BaseModel):
@@ -19,6 +21,7 @@ class BatchSummaryResponse(BaseModel):
     BatchStatus: str
     ErrorCount: int | None = None
     CreatedAt: datetime | None = None
+    ContentHash: str | None = None
 
 
 class ValidationErrorCountResponse(BaseModel):

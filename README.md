@@ -54,19 +54,60 @@ If PowerShell blocks activation, run:
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 ```
 
-### SQL Server (Docker) integration tests
+### Full stack (Docker)
 
-Unit and characterization tests need no database. Optional end-to-end tests run the real ingestion pipeline against SQL Server in Docker.
+One compose file runs SQL Server, the FastAPI backend (ODBC Driver 18, SQL auth), and an nginx frontend.
 
 ```powershell
-# 1) Start SQL Server
-docker compose up -d
+copy .env.docker.example .env.docker
+# Edit .env.docker: set MSSQL_SA_PASSWORD and API_KEY (frontend build uses the same API_KEY)
 
-# 2) Apply staging schema, procedures, and DimLocation / DimSector seeds
+docker compose --env-file .env.docker up --build -d
+```
+
+- UI: http://localhost:8080
+- API docs: http://localhost:8001/docs
+- Health: http://localhost:8080/api/health (via nginx) or http://localhost:8001/api/health
+
+Schema, procedures, and DimLocation / DimSector seeds are applied automatically by the `db-init` service via [`database/migrate.py`](database/migrate.py) (numbered scripts in [`database/migrations/`](database/migrations/), tracked in `dbo.SchemaVersion`). Trusted Connection is not used; the backend connects as `sa` over the Docker network (`sqlserver,1433`).
+
+### Database migrations
+
+Numbered, idempotent SQL scripts live in `database/migrations/` (`001_….sql`, `002_….sql`, …). The runner records each applied version in `dbo.SchemaVersion` (name, sha256 checksum, timestamp) and skips already-applied scripts.
+
+```powershell
+# Apply pending migrations (create DB if needed)
+python database/migrate.py
+
+# Or via wrappers (same env vars as Docker SQL)
 .\database\docker\apply_schema.ps1
 
-# 3) Run integration tests only
+# Show applied vs pending
+python database/migrate.py --status
+```
+
+Add a new change as the next number, e.g. `006_my_change.sql`. Prefer `IF NOT EXISTS` / `CREATE OR ALTER` so scripts stay re-runnable. Reporting views and AI/PBI security scripts stay separate (password parameters) and are not auto-migrated.
+
+Stop / reset:
+
+```powershell
+docker compose --env-file .env.docker down
+# wipe SQL volume too:
+# docker compose --env-file .env.docker down -v
+```
+
+### SQL Server integration tests (host pytest)
+
+Unit and characterization tests need no database. Optional end-to-end tests run the real ingestion pipeline against the compose SQL Server from the host.
+
+```powershell
+# 1) Start the stack (or at least SQL + db-init)
+docker compose --env-file .env.docker up --build -d
+
+# 2) Run integration tests only (schema already applied by db-init)
 $env:RUN_SQL_INTEGRATION = "1"
+$env:SQL_SCHEMA_APPLIED = "1"
+$env:SQL_DRIVER = "ODBC Driver 18 for SQL Server"
 pytest tests/integration -m integration
 ```
 
@@ -114,7 +155,7 @@ Config: `.pre-commit-config.yaml`, `.gitleaks.toml`, and `[tool.ruff]` / `[tool.
 `.github/workflows/ci.yml` runs on pushes to `main`, on pull requests, and manually (`workflow_dispatch`). It has three parallel jobs:
 
 - **Lint & type-check** — `ruff check`, `ruff format --check`, `mypy`
-- **Tests (with SQL Server)** — starts a `mssql/server:2022` service container, installs ODBC Driver 18 + `sqlcmd`, applies the schema with `database/docker/apply_schema.sh`, then runs unit/characterization tests (with coverage on `ingestion_engine`) and the integration tests
+- **Tests (with SQL Server)** — starts a `mssql/server:2022` service container, installs ODBC Driver 18 + `sqlcmd`, applies migrations with `python database/migrate.py`, then runs unit/characterization tests (with coverage on `ingestion_engine`) and the integration tests
 - **Frontend build** — `npm ci && npm run build` in `frontend/`
 
 In CI the integration tests run with `SQL_SCHEMA_APPLIED=1` (skip the in-test schema apply) and `SQL_INTEGRATION_STRICT=1` (fail instead of skip if SQL Server is unreachable). The SA password in the workflow is a throwaway for the ephemeral container, not a real credential.
@@ -467,7 +508,11 @@ cost-benchmarking-poc/
 ├── requirements.txt
 ├── requirements-dev.txt
 ├── docker-compose.yml
+├── .env.docker.example
+├── .dockerignore
 ├── frontend/
+│   ├── Dockerfile
+│   ├── nginx.conf
 │   ├── src/
 │   │   ├── api/
 │   │   ├── components/
@@ -478,6 +523,8 @@ cost-benchmarking-poc/
 │   │   └── main.tsx
 │   └── package.json
 ├── backend/
+│   ├── Dockerfile
+│   ├── docker-entrypoint.sh
 │   ├── app/
 │   │   ├── main.py
 │   │   ├── api/
@@ -494,6 +541,8 @@ cost-benchmarking-poc/
 ├── benchmarking/
 │   └── ingest.py
 ├── database/
+│   ├── migrate.py
+│   ├── migrations/
 │   ├── schema/
 │   ├── procedures/
 │   ├── security/

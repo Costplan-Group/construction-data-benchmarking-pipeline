@@ -16,10 +16,14 @@ def test_ingestion_result_as_dict():
         status=BatchStatus.COMMITTED,
         error_count=2,
         source_file_name="a.xlsx",
+        content_hash="abc",
+        duplicate=True,
     )
     payload = result.as_dict()
     assert payload["status"] == "COMMITTED"
     assert payload["error_count"] == 2
+    assert payload["content_hash"] == "abc"
+    assert payload["duplicate"] is True
 
 
 def test_module_db_and_get_connection():

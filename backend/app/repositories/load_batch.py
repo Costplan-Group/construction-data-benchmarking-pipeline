@@ -15,7 +15,12 @@ class LoadBatchRepository:
     def __init__(self, db: Database) -> None:
         self._db = db
 
-    def create(self, file_name: str, source_file_path: str) -> str:
+    def create(
+        self,
+        file_name: str,
+        source_file_path: str,
+        content_hash: str | None = None,
+    ) -> str:
         load_batch_id = str(uuid.uuid4())
         self._db.execute(
             """
@@ -23,13 +28,39 @@ class LoadBatchRepository:
                 LoadBatchID,
                 SourceFileName,
                 SourceFilePath,
-                BatchStatus
+                BatchStatus,
+                ContentHash
             )
-            VALUES (?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?)
             """,
-            (load_batch_id, file_name, source_file_path, BatchStatus.RECEIVED.value),
+            (
+                load_batch_id,
+                file_name,
+                source_file_path,
+                BatchStatus.RECEIVED.value,
+                content_hash,
+            ),
         )
         return load_batch_id
+
+    def find_by_content_hash(self, content_hash: str) -> dict[str, Any] | None:
+        rows = self._db.fetch_all(
+            """
+            SELECT TOP 1
+                LoadBatchID,
+                SourceFileName,
+                SourceFilePath,
+                BatchStatus,
+                ErrorCount,
+                CreatedAt,
+                ContentHash
+            FROM stg.LoadBatch
+            WHERE ContentHash = ?
+            ORDER BY CreatedAt DESC
+            """,
+            (content_hash,),
+        )
+        return rows[0] if rows else None
 
     def update_status(self, load_batch_id: str, status: str | BatchStatus) -> None:
         status_value = status.value if isinstance(status, BatchStatus) else status
@@ -68,7 +99,8 @@ class LoadBatchRepository:
                 SourceFilePath,
                 BatchStatus,
                 ErrorCount,
-                CreatedAt
+                CreatedAt,
+                ContentHash
             FROM stg.LoadBatch
             WHERE LoadBatchID = ?
             """,

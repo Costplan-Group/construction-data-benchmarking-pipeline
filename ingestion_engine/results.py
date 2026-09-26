@@ -14,6 +14,8 @@ class IngestionResult:
     error_count: int = 0
     source_file_name: str | None = None
     exception: str | None = None
+    content_hash: str | None = None
+    duplicate: bool = False
 
     def as_dict(self) -> dict:
         """API-friendly dict (enum values as strings)."""

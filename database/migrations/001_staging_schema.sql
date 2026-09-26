@@ -39,30 +39,8 @@ BEGIN
         SourceFilePath NVARCHAR(1000) NULL,
         BatchStatus NVARCHAR(50) NOT NULL,
         ErrorCount INT NOT NULL CONSTRAINT DF_LoadBatch_ErrorCount DEFAULT (0),
-        CreatedAt DATETIME2(0) NOT NULL CONSTRAINT DF_LoadBatch_CreatedAt DEFAULT (SYSUTCDATETIME()),
-        ContentHash CHAR(64) NULL
+        CreatedAt DATETIME2(0) NOT NULL CONSTRAINT DF_LoadBatch_CreatedAt DEFAULT (SYSUTCDATETIME())
     );
-END;
-GO
-
-IF COL_LENGTH('stg.LoadBatch', 'ContentHash') IS NULL
-   AND OBJECT_ID('stg.LoadBatch', 'U') IS NOT NULL
-BEGIN
-    ALTER TABLE stg.LoadBatch ADD ContentHash CHAR(64) NULL;
-END;
-GO
-
-IF OBJECT_ID('stg.LoadBatch', 'U') IS NOT NULL
-   AND NOT EXISTS (
-       SELECT 1
-       FROM sys.indexes
-       WHERE name = 'UX_LoadBatch_ContentHash'
-         AND object_id = OBJECT_ID('stg.LoadBatch')
-   )
-BEGIN
-    CREATE UNIQUE INDEX UX_LoadBatch_ContentHash
-        ON stg.LoadBatch (ContentHash)
-        WHERE ContentHash IS NOT NULL;
 END;
 GO
 

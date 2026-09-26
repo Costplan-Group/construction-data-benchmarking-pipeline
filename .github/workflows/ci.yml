@@ -92,7 +92,7 @@ jobs:
           SQL_SERVER: localhost,1433
           SQL_DB: Benchmarking
           SQL_UID: sa
-        run: bash database/docker/apply_schema.sh
+        run: python database/migrate.py
 
       # Keep SQL_* out of this step: unit tests build IngestionConfig from kwargs and
       # must not inherit CI SQL auth env (pydantic-settings still reads the process env).
@@ -112,7 +112,7 @@ jobs:
         run: pytest -m integration -v
 
   frontend:
-    name: Frontend build
+    name: Frontend lint, test, and build
     runs-on: ubuntu-24.04
     defaults:
       run:
@@ -128,6 +128,12 @@ jobs:
 
       - name: Install
         run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm test
 
       - name: Build
         run: npm run build

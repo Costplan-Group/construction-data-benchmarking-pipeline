@@ -4,6 +4,8 @@ export type IngestionRunResponse = {
   error_count: number;
   source_file_name?: string | null;
   exception?: string | null;
+  content_hash?: string | null;
+  duplicate?: boolean;
 };
 
 export type BatchSummary = {
@@ -13,6 +15,7 @@ export type BatchSummary = {
   BatchStatus: string;
   ErrorCount?: number | null;
   CreatedAt?: string | null;
+  ContentHash?: string | null;
 };
 
 export type ValidationErrorCount = {

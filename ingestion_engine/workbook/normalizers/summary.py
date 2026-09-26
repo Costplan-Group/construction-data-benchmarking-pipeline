@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 
 import pandas as pd
@@ -17,6 +18,8 @@ from ingestion_engine.workbook.normalizers.summary_header import (
     detect_summary_header_row,
 )
 from ingestion_engine.workbook.normalizers.summary_selection import select_summary_contractor_block
+
+logger = logging.getLogger(__name__)
 
 
 def _excel_col_letter_from_zero_based(col_idx: int | None) -> str | None:
@@ -174,18 +177,14 @@ class SummaryNormalizer(SheetNormalizer):
 
         out = out[out["L2Code"].notna()].copy()
         if get_ingestion_config().debug_level2:
-            print(
-                "[DEBUG_LEVEL2] selected_contractor=",
+            logger.debug(
+                "DEBUG_LEVEL2 selected_contractor=%s header_row=%s metric_row=%s "
+                "block=%s rate_col=%s total_col=%s",
                 selected_contractor or "<unknown>",
-                " header_row=",
                 header_idx,
-                " metric_row=",
                 contractor_metric_row_idx,
-                " block=",
                 selected_block,
-                " rate_col=",
                 rate_col,
-                " total_col=",
                 total_col,
             )
             preview_cols = [
@@ -208,11 +207,11 @@ class SummaryNormalizer(SheetNormalizer):
                 ]
                 if c in out.columns
             ]
-            print("[DEBUG_LEVEL2] preview:")
             try:
-                print(out[preview_cols].head(8).to_string(index=False))
+                preview = out[preview_cols].head(8).to_string(index=False)
             except Exception:
-                print(out.head(8).to_string(index=False))
+                preview = out.head(8).to_string(index=False)
+            logger.debug("DEBUG_LEVEL2 preview:\n%s", preview)
         return out.dropna(how="all")
 
 

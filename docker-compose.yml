@@ -1,18 +1,23 @@
-# SQL Server for local integration tests.
+# Full stack: SQL Server + FastAPI backend (ODBC 18, SQL auth) + nginx frontend.
+#
 # Usage:
-#   copy .env.docker.example .env.docker   # optional; compose has defaults
-#   docker compose up -d
-#   .\database\docker\apply_schema.ps1
+#   copy .env.docker.example .env.docker
+#   docker compose --env-file .env.docker up --build -d
+#
+# UI:  http://localhost:8080
+# API: http://localhost:8001/docs
+#
+# Integration tests (host pytest against published SQL port):
 #   $env:RUN_SQL_INTEGRATION=1; pytest tests/integration -m integration
 
 services:
   sqlserver:
-    image: mcr.microsoft.com/azure-sql-edge:latest
+    image: mcr.microsoft.com/mssql/server:2022-latest
     container_name: benchmarking-sql
     environment:
       ACCEPT_EULA: "Y"
       MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD:-Your_strong_Password123}
-      MSSQL_PID: "Developer"
+      MSSQL_PID: Developer
     ports:
       - "${MSSQL_PORT:-1433}:1433"
     volumes:
@@ -21,12 +26,79 @@ services:
       test:
         [
           "CMD-SHELL",
-          "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$${MSSQL_SA_PASSWORD}\" -C -Q \"SELECT 1\" || exit 1",
+          '/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$$MSSQL_SA_PASSWORD" -C -Q "SELECT 1" -b -o /dev/null || exit 1',
         ]
       interval: 10s
       timeout: 5s
       retries: 20
       start_period: 30s
 
+  db-init:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: benchmarking-db-init
+    restart: "no"
+    environment:
+      SQL_SERVER: sqlserver,1433
+      SQL_DB: Benchmarking
+      SQL_UID: sa
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD:-Your_strong_Password123}
+      SQL_PWD: ${MSSQL_SA_PASSWORD:-Your_strong_Password123}
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    entrypoint: ["bash", "/app/database/docker/db-init.sh"]
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: benchmarking-backend
+    environment:
+      SQL_SERVER: sqlserver,1433
+      SQL_DB: Benchmarking
+      SQL_DRIVER: ODBC Driver 18 for SQL Server
+      SQL_TRUSTED_CONNECTION: "false"
+      SQL_UID: sa
+      SQL_PWD: ${MSSQL_SA_PASSWORD:-Your_strong_Password123}
+      SQL_ENCRYPT: "false"
+      SQL_TRUST_SERVER_CERTIFICATE: "true"
+      API_KEY: ${API_KEY:-change-me-local-api-key}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      FASTAPI_CORS_ORIGINS: ${FASTAPI_CORS_ORIGINS:-http://localhost:8080,http://127.0.0.1:8080}
+      DATA_DIR: /app/data
+    ports:
+      - "${BACKEND_PORT:-8001}:8001"
+    volumes:
+      - backend_data:/app/data
+    depends_on:
+      db-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/api/health')\"",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        VITE_API_KEY: ${API_KEY:-change-me-local-api-key}
+    container_name: benchmarking-frontend
+    ports:
+      - "${FRONTEND_PORT:-8080}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+
 volumes:
   mssql_data:
+  backend_data:
