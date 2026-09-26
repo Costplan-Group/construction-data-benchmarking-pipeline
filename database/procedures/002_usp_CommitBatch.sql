@@ -129,6 +129,7 @@ BEGIN
             @DimProjectUpdatedAtCol SYSNAME,
             @DimCostSetCostSetKeyCol SYSNAME,
             @DimCostSetProjectKeyCol SYSNAME,
+            @DimCostSetProjectIDCol SYSNAME,
             @DimCostSetSourceCostSetIdentifierCol SYSNAME,
             @DimCostSetLoadBatchIDCol SYSNAME,
             @DimCostSetGIFACol SYSNAME,
@@ -282,6 +283,9 @@ BEGIN
         SELECT @DimCostSetProjectKeyCol = c.name
         FROM sys.columns c
         WHERE c.object_id = OBJECT_ID('dbo.DimCostSet') AND LOWER(c.name) = 'projectkey';
+        SELECT @DimCostSetProjectIDCol = c.name
+        FROM sys.columns c
+        WHERE c.object_id = OBJECT_ID('dbo.DimCostSet') AND LOWER(c.name) = 'projectid';
         SELECT @DimCostSetSourceCostSetIdentifierCol = c.name
         FROM sys.columns c
         WHERE c.object_id = OBJECT_ID('dbo.DimCostSet') AND LOWER(c.name) = 'sourcecostsetidentifier';
@@ -389,6 +393,7 @@ BEGIN
         USING (
             SELECT
                 @ProjectKey AS ProjectKey,
+                @ProjectID AS ProjectID,
                 @GIFA AS GIFA,
                 @CostStage AS CostStage,
                 @BudgetStage AS BudgetStage,
@@ -404,6 +409,7 @@ BEGIN
         WHEN MATCHED THEN
             UPDATE SET
                 tgt.' + QUOTENAME(@DimCostSetProjectKeyCol) + N' = src.ProjectKey' +
+                CASE WHEN @DimCostSetProjectIDCol IS NOT NULL THEN N', tgt.' + QUOTENAME(@DimCostSetProjectIDCol) + N' = src.ProjectID' ELSE N'' END +
                 CASE WHEN @DimCostSetLoadBatchIDCol IS NOT NULL THEN N', tgt.' + QUOTENAME(@DimCostSetLoadBatchIDCol) + N' = @LoadBatchID' ELSE N'' END +
                 CASE WHEN @DimCostSetSourceCostSetIdentifierCol IS NOT NULL THEN N', tgt.' + QUOTENAME(@DimCostSetSourceCostSetIdentifierCol) + N' = src.SourceCostSetIdentifier' ELSE N'' END +
                 CASE WHEN @DimCostSetGIFACol IS NOT NULL THEN N', tgt.' + QUOTENAME(@DimCostSetGIFACol) + N' = src.GIFA' ELSE N'' END +
@@ -418,6 +424,7 @@ BEGIN
                 CASE WHEN @DimCostSetUpdatedAtCol IS NOT NULL THEN N', tgt.' + QUOTENAME(@DimCostSetUpdatedAtCol) + N' = SYSUTCDATETIME()' ELSE N'' END + N'
         WHEN NOT MATCHED THEN
             INSERT (' + QUOTENAME(@DimCostSetProjectKeyCol) +
+                CASE WHEN @DimCostSetProjectIDCol IS NOT NULL THEN N', ' + QUOTENAME(@DimCostSetProjectIDCol) ELSE N'' END +
                 CASE WHEN @DimCostSetSourceCostSetIdentifierCol IS NOT NULL THEN N', ' + QUOTENAME(@DimCostSetSourceCostSetIdentifierCol) ELSE N'' END +
                 CASE WHEN @DimCostSetLoadBatchIDCol IS NOT NULL THEN N', ' + QUOTENAME(@DimCostSetLoadBatchIDCol) ELSE N'' END +
                 CASE WHEN @DimCostSetGIFACol IS NOT NULL THEN N', ' + QUOTENAME(@DimCostSetGIFACol) ELSE N'' END +
@@ -432,6 +439,7 @@ BEGIN
                 CASE WHEN @DimCostSetIsCurrentCol IS NOT NULL THEN N', ' + QUOTENAME(@DimCostSetIsCurrentCol) ELSE N'' END + N')
             VALUES (
                 src.ProjectKey' +
+                CASE WHEN @DimCostSetProjectIDCol IS NOT NULL THEN N', src.ProjectID' ELSE N'' END +
                 CASE WHEN @DimCostSetSourceCostSetIdentifierCol IS NOT NULL THEN N', src.SourceCostSetIdentifier' ELSE N'' END +
                 CASE WHEN @DimCostSetLoadBatchIDCol IS NOT NULL THEN N', @LoadBatchID' ELSE N'' END +
                 CASE WHEN @DimCostSetGIFACol IS NOT NULL THEN N', src.GIFA' ELSE N'' END +
@@ -450,8 +458,9 @@ BEGIN
 
         EXEC sp_executesql
             @DynamicSql,
-            N'@ProjectKey INT, @LoadBatchID UNIQUEIDENTIFIER, @GIFA DECIMAL(18,2), @CostStage NVARCHAR(100), @BudgetStage NVARCHAR(100), @DataStatus NVARCHAR(100), @SourceCostSetIdentifier NVARCHAR(255), @SourceFile NVARCHAR(260), @SelectedContractor NVARCHAR(255), @BaseDate DATE, @Currency NVARCHAR(20)',
+            N'@ProjectKey INT, @ProjectID NVARCHAR(100), @LoadBatchID UNIQUEIDENTIFIER, @GIFA DECIMAL(18,2), @CostStage NVARCHAR(100), @BudgetStage NVARCHAR(100), @DataStatus NVARCHAR(100), @SourceCostSetIdentifier NVARCHAR(255), @SourceFile NVARCHAR(260), @SelectedContractor NVARCHAR(255), @BaseDate DATE, @Currency NVARCHAR(20)',
             @ProjectKey = @ProjectKey,
+            @ProjectID = @ProjectID,
             @LoadBatchID = @LoadBatchID,
             @GIFA = @GIFA,
             @CostStage = @CostStage,
