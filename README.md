@@ -54,6 +54,26 @@ If PowerShell blocks activation, run:
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 ```
 
+### SQL Server (Docker) integration tests
+
+Unit and characterization tests need no database. Optional end-to-end tests run the real ingestion pipeline against SQL Server in Docker.
+
+```powershell
+# 1) Start SQL Server
+docker compose up -d
+
+# 2) Apply staging schema, procedures, and DimLocation seed
+.\database\docker\apply_schema.ps1
+
+# 3) Run integration tests only
+$env:RUN_SQL_INTEGRATION = "1"
+pytest tests/integration -m integration
+```
+
+Defaults match `docker-compose.yml` / `.env.docker.example` (`sa` / `Your_strong_Password123`, database `Benchmarking`). Override with `MSSQL_SA_PASSWORD` / `SQL_*` env vars if needed.
+
+Without `RUN_SQL_INTEGRATION=1`, integration tests are skipped. Reporting views and AI/PBI security scripts are not applied by this path.
+
 ### Secret scanning and code quality hooks
 
 Install git hooks once per clone (after `pip install -r requirements-dev.txt` or `uv sync --group dev`):
@@ -88,6 +108,16 @@ pre-commit run gitleaks --all-files
 ```
 
 Config: `.pre-commit-config.yaml`, `.gitleaks.toml`, and `[tool.ruff]` / `[tool.mypy]` in `pyproject.toml`.
+
+### Continuous integration (GitHub Actions)
+
+`.github/workflows/ci.yml` runs on pushes to `main`, on pull requests, and manually (`workflow_dispatch`). It has three parallel jobs:
+
+- **Lint & type-check** — `ruff check`, `ruff format --check`, `mypy`
+- **Tests (with SQL Server)** — starts a `mssql/server:2022` service container, installs ODBC Driver 18 + `sqlcmd`, applies the schema with `database/docker/apply_schema.sh`, then runs unit/characterization tests (with coverage on `ingestion_engine`) and the integration tests
+- **Frontend build** — `npm ci && npm run build` in `frontend/`
+
+In CI the integration tests run with `SQL_SCHEMA_APPLIED=1` (skip the in-test schema apply) and `SQL_INTEGRATION_STRICT=1` (fail instead of skip if SQL Server is unreachable). The SA password in the workflow is a throwaway for the ephemeral container, not a real credential.
 
 ## Run The Frontend
 
@@ -436,6 +466,7 @@ cost-benchmarking-poc/
 ├── uv.lock
 ├── requirements.txt
 ├── requirements-dev.txt
+├── docker-compose.yml
 ├── frontend/
 │   ├── src/
 │   │   ├── api/
@@ -464,6 +495,12 @@ cost-benchmarking-poc/
 │   └── ingest.py
 ├── database/
 │   ├── schema/
-│   └── procedures/
+│   ├── procedures/
+│   ├── security/
+│   └── docker/
+├── tests/
+│   ├── unit/
+│   ├── characterization/
+│   └── integration/
 └── README.md
 ```

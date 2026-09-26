@@ -6,6 +6,8 @@ cfgv==3.5.0
     # via pre-commit
 colorama==0.4.6 ; sys_platform == 'win32'
     # via pytest
+coverage==7.16.1
+    # via pytest-cov
 distlib==0.4.3
     # via virtualenv
 filelock==4.0.3
@@ -30,16 +32,22 @@ pathspec==1.1.1
 platformdirs==4.11.14
     # via virtualenv
 pluggy==1.6.0
-    # via pytest
+    # via
+    #   pytest
+    #   pytest-cov
 pre-commit==4.6.2
 pygments==2.21.0
     # via pytest
 pytest==9.1.1
+    # via pytest-cov
+pytest-cov==7.0.0
 python-discovery==1.6.1
     # via virtualenv
 pyyaml==6.0.3
     # via pre-commit
 ruff==0.16.9
+tomli==2.4.1 ; python_full_version <= '3.11'
+    # via coverage
 types-pyyaml==6.0.12.20260906
 typing-extensions==4.16.0
     # via mypy

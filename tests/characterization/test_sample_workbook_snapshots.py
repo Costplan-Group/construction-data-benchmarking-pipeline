@@ -15,6 +15,7 @@ import pytest
 
 from ingestion_engine import excel_file_ingestion as ing
 from ingestion_engine.config import IngestionConfig, clear_ingestion_config_cache
+from ingestion_engine.workbook import read_workbook
 
 from .helpers import (
     CANONICAL_DATAFRAMES,
@@ -45,8 +46,11 @@ def _test_config(**overrides) -> IngestionConfig:
 def sample_dataframes():
     assert SAMPLE_WORKBOOK.exists(), f"Missing sample workbook: {SAMPLE_WORKBOOK}"
     clear_ingestion_config_cache()
-    with patch.object(ing, "get_ingestion_config", return_value=_test_config()):
-        dfs = ing.read_workbook(io.BytesIO(SAMPLE_WORKBOOK.read_bytes()))
+    with patch(
+        "ingestion_engine.config.get_ingestion_config",
+        return_value=_test_config(),
+    ):
+        dfs = read_workbook(io.BytesIO(SAMPLE_WORKBOOK.read_bytes()))
     clear_ingestion_config_cache()
     yield dfs
 
