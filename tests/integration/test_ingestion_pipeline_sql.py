@@ -81,6 +81,135 @@ def test_sample_workbook_commits_with_expected_staging_counts(db_connection):
     assert validation_errors == 0
 
 
+def _scalar(conn, sql: str, params=None):
+    cur = conn.cursor()
+    if params is not None:
+        cur.execute(sql, params)
+    else:
+        cur.execute(sql)
+    row = cur.fetchone()
+    return row[0] if row else None
+
+
+def test_commit_populates_warehouse_dims_and_facts(db_connection):
+    result = process_local_file(str(SAMPLE_WORKBOOK))
+    assert result.status == BatchStatus.COMMITTED, result.exception
+    batch_id = result.load_batch_id
+
+    cost_set_key = _scalar(
+        db_connection,
+        """
+        SELECT cs.CostSetKey
+        FROM dbo.DimCostSet cs
+        INNER JOIN stg.ProjectInformation pi
+            ON pi.ProjectID = cs.ProjectID
+        WHERE pi.LoadBatchID = ?
+        """,
+        (batch_id,),
+    )
+    assert cost_set_key is not None
+
+    staged_l2_codes = _count(
+        db_connection,
+        """
+        SELECT COUNT(DISTINCT UPPER(LTRIM(RTRIM(L2Code))))
+        FROM stg.Level2
+        WHERE LoadBatchID = ? AND NULLIF(LTRIM(RTRIM(L2Code)), '') IS NOT NULL
+        """,
+        (batch_id,),
+    )
+    staged_total = _scalar(
+        db_connection,
+        "SELECT SUM(TotalCost) FROM stg.Level2 WHERE LoadBatchID = ?",
+        (batch_id,),
+    )
+    assert staged_l2_codes > 0
+
+    fact_rows = _count(
+        db_connection,
+        "SELECT COUNT(*) FROM dbo.FactElementCostL2 WHERE costSetKey = ?",
+        (cost_set_key,),
+    )
+    fact_total = _scalar(
+        db_connection,
+        "SELECT SUM(TotalCost) FROM dbo.FactElementCostL2 WHERE costSetKey = ?",
+        (cost_set_key,),
+    )
+    assert fact_rows == staged_l2_codes
+    assert fact_total == staged_total
+
+    missing_elements = _count(
+        db_connection,
+        """
+        SELECT COUNT(*)
+        FROM stg.Level2 l2
+        WHERE l2.LoadBatchID = ?
+          AND NOT EXISTS (
+              SELECT 1 FROM dbo.DimElementL2 e
+              WHERE UPPER(LTRIM(RTRIM(e.L2Code))) = UPPER(LTRIM(RTRIM(l2.L2Code)))
+          )
+        """,
+        (batch_id,),
+    )
+    assert missing_elements == 0
+
+    missing_contractors = _count(
+        db_connection,
+        """
+        SELECT COUNT(*)
+        FROM stg.ProjectTenderer pt
+        WHERE pt.LoadBatchID = ?
+          AND NOT EXISTS (
+              SELECT 1 FROM dbo.DimContractor dc
+              WHERE UPPER(LTRIM(RTRIM(dc.ContractorName)))
+                  = UPPER(LTRIM(RTRIM(COALESCE(NULLIF(LTRIM(RTRIM(pt.TendererName)), ''), pt.TendererLabel))))
+          )
+        """,
+        (batch_id,),
+    )
+    assert missing_contractors == 0
+
+    has_selected = _count(
+        db_connection,
+        "SELECT COUNT(*) FROM stg.ProjectTenderer WHERE LoadBatchID = ? AND IsSelected = 1",
+        (batch_id,),
+    )
+    contractor_key = _scalar(
+        db_connection,
+        "SELECT ContractorKey FROM dbo.DimCostSet WHERE CostSetKey = ?",
+        (cost_set_key,),
+    )
+    if has_selected:
+        assert contractor_key is not None
+
+    summary = db_connection.cursor()
+    summary.execute(
+        """
+        SELECT measuredWorksTotal, grandTotal
+        FROM dbo.FactCostSetSummary
+        WHERE costSetKey = ?
+        """,
+        (cost_set_key,),
+    )
+    summary_row = summary.fetchone()
+    assert summary_row is not None
+    assert summary_row[0] == staged_total
+    assert summary_row[1] is not None
+
+    # Re-committing the same cost set replaces facts rather than duplicating them.
+    cur = db_connection.cursor()
+    cur.execute("EXEC stg.usp_CommitBatch ?", (batch_id,))
+    db_connection.commit()
+    assert (
+        _count(
+            db_connection,
+            "SELECT COUNT(*) FROM dbo.FactElementCostL2 WHERE costSetKey = ?",
+            (cost_set_key,),
+        )
+        == staged_l2_codes
+    )
+
+
 def test_failing_workbook_marks_batch_failed(db_connection):
     assert FAILING_WORKBOOK.exists(), f"Missing failing workbook: {FAILING_WORKBOOK}"
 
