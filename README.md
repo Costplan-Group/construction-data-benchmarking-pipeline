@@ -86,7 +86,7 @@ python database/migrate.py
 python database/migrate.py --status
 ```
 
-Add a new change as the next number, e.g. `006_my_change.sql`. Prefer `IF NOT EXISTS` / `CREATE OR ALTER` so scripts stay re-runnable. Reporting views and AI/PBI security scripts stay separate (password parameters) and are not auto-migrated.
+`database/migrations/` is the only source of truth for tables and procedures; never edit an applied migration (the checksum will drift) — add a new one instead, e.g. `009_my_change.sql`. Prefer `IF NOT EXISTS` / `CREATE OR ALTER` so scripts stay re-runnable. Reporting views and AI/PBI security scripts stay separate (password parameters) and are not auto-migrated.
 
 Stop / reset:
 
@@ -491,7 +491,7 @@ Does **not** grant `stg.*`. Use a different password from `ai_readonly`.
 ### 3) Connect Power BI Desktop
 
 1. Get data → **SQL Server**.
-2. Server: your instance (e.g. `PRISCILLA_BAIYA\SQLEXPRESS`); Database: your DB.
+2. Server: your instance (e.g. `YOUR_SERVER\INSTANCE`); Database: your DB.
 3. Data Connectivity mode: **Import** (typical) or **DirectQuery**.
 4. Authentication: **Database** → user `pbi_readonly` and the password you set.
 5. Select the four `vw_BI_*` views first (recommended). Advanced authors can also load Dim/Fact tables.
@@ -549,9 +549,8 @@ cost-benchmarking-poc/
 │   └── ingest.py
 ├── database/
 │   ├── migrate.py
-│   ├── migrations/
-│   ├── schema/
-│   ├── procedures/
+│   ├── migrations/      # source of truth for schema + procedures (applied by migrate.py)
+│   ├── schema/          # 002_reporting_views.sql only (manual, not migrated)
 │   ├── security/
 │   └── docker/
 ├── tests/

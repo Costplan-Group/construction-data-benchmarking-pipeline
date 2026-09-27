@@ -3,6 +3,10 @@ __pycache__/
 .venv/
 env/
 .ipynb_checkpoints/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
 .DS_Store
 Thumbs.db
 
