@@ -458,11 +458,15 @@ Power BI connects to **committed warehouse** data (`dbo.Dim*` / `dbo.Fact*`) via
 ### 1) Create / refresh reporting views
 
 Warehouse tables are created by migration `007_warehouse_tables.sql` and loaded by
-`stg.usp_CommitBatch` (`008`): `DimProject`, `DimCostSet`, `DimContractor`, `DimElementL2`,
+`stg.usp_CommitBatch` (`010`): `DimProject`, `DimCostSet`, `DimContractor`, `DimElementL2`,
 `DimAdjustmentType`, `FactProjectQuant`, `FactElementCostL2`, `FactCostAdjustment`,
-`FactCostSetSummary`. The views also expect `DimLocation.DisplayLabel/Country/Region` and
-`DimCostSet.IsCurrent/DataStatus`, which the migration schema does not create; add those
-columns first on a fresh database.
+`FactCostSetSummary`. The views also expect `DimLocation.DisplayLabel/Country/Region`, which
+the migration schema does not create; add that table first on a fresh database.
+
+`DimCostSet` has exactly one row per `(ProjectID, ContractorKey, CostStage)`
+(`UQ_DimCostSet_Project_Contractor_Stage`, migration `009`). Re-ingesting the same project,
+contractor and stage updates that row in place and keeps its `CostSetKey`; its facts are
+deleted and reloaded. There is no `IsCurrent`/`DataStatus` flag: every row is current.
 
 After Dim/Fact tables exist (e.g. after a successful commit):
 
@@ -474,7 +478,7 @@ Views:
 
 | View | Contents |
 |------|----------|
-| `dbo.vw_BI_ProjectOverview` | Project + sector + location + current cost set |
+| `dbo.vw_BI_ProjectOverview` | Project + sector + location, one row per cost set (stage) |
 | `dbo.vw_BI_Level2CostBreakdown` | L1/L2 element costs (with optional cost/m²) |
 | `dbo.vw_BI_AdjustmentSummary` | Cost adjustments by category / subtype |
 | `dbo.vw_BI_CostSetSummary` | Measured works / grand total style totals |
@@ -500,7 +504,7 @@ Does **not** grant `stg.*`. Use a different password from `ai_readonly`.
 
 - Start with the views as ready-made star slices (keys such as `ProjectKey`, `CostSetKey`, `ElementL2Key` are included for relationships).
 - Or load `DimProject`, `DimCostSet`, `DimElementL2`, `DimSector`, `DimLocation` as dimensions and relate them to fact views / tables on those keys.
-- Prefer filtering `CostSetIsCurrent = 1` (or `IsCurrent = 1` on `DimCostSet`) when analysing the current cost set only.
+- Every `DimCostSet` row is current. Filter or slice by `CostStage` to compare stages; a project with several stages has several cost sets.
 
 ### 5) Power BI Service (optional)
 

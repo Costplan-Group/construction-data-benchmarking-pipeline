@@ -27,7 +27,7 @@ TECHNICAL_KEY_COLUMN_PATTERN = re.compile(r"key$", re.IGNORECASE)
 # Fallback schema if INFORMATION_SCHEMA introspection is unavailable.
 WAREHOUSE_SCHEMA_FALLBACK: list[str] = [
     "- dbo.DimProject (ProjectKey, ProjectID, ProjectName, ClientName, LocationKey, SectorKey, CreatedAt, UpdatedAt)",
-    "- dbo.DimCostSet (CostSetKey, ProjectKey, ContractorKey, SourceCostSetIdentifier, CostStage, DataStatus, BaseDate, Currency, GIFA, SourceFile, UploadedAt, IsCurrent, ...)",
+    "- dbo.DimCostSet (CostSetKey, ProjectKey, ProjectID, ContractorKey, CostStage, SourceCostSetIdentifier, BaseDate, Currency, GIFA, SourceFile, UploadedAt, ...)",
     "- dbo.DimSector (SectorKey, SectorCode, SectorName, SortOrder, IsActive)",
     "- dbo.DimLocation (LocationKey, Country, Region, CountryCode, DisplayLabel, IsActive)",
     "- dbo.DimContractor (ContractorKey, ContractorName, IsActive)",
@@ -179,7 +179,7 @@ Join guidance:
 - DimProject.SectorKey = DimSector.SectorKey
 - DimProject.LocationKey = DimLocation.LocationKey
 - FactElementCostL2.elementL2Key = DimElementL2.ElementL2Key
-- Prefer DimCostSet rows with IsCurrent = 1 when that column exists
+- DimCostSet has one row per (ProjectID, ContractorKey, CostStage); every row is current, so filter by CostStage rather than a current flag
 - Cost per m2: TotalCost / NULLIF(GIFA, 0) using FactElementCostL2 (or FactCostSetSummary) with DimCostSet.GIFA
 
 Rules:

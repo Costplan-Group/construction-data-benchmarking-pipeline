@@ -96,18 +96,30 @@ def test_commit_populates_warehouse_dims_and_facts(db_connection):
     assert result.status == BatchStatus.COMMITTED, result.exception
     batch_id = result.load_batch_id
 
-    cost_set_key = _scalar(
-        db_connection,
-        """
+    cost_set_lookup = """
         SELECT cs.CostSetKey
         FROM dbo.DimCostSet cs
         INNER JOIN stg.ProjectInformation pi
             ON pi.ProjectID = cs.ProjectID
+           AND (cs.CostStage = NULLIF(LTRIM(RTRIM(pi.CostStage)), '')
+                OR (cs.CostStage IS NULL AND NULLIF(LTRIM(RTRIM(pi.CostStage)), '') IS NULL))
         WHERE pi.LoadBatchID = ?
-        """,
-        (batch_id,),
-    )
+    """
+    natural_key_rows = """
+        SELECT COUNT(*)
+        FROM dbo.DimCostSet cs
+        INNER JOIN dbo.DimCostSet ref
+            ON ref.CostSetKey = ?
+        WHERE cs.ProjectID = ref.ProjectID
+          AND (cs.ContractorKey = ref.ContractorKey
+               OR (cs.ContractorKey IS NULL AND ref.ContractorKey IS NULL))
+          AND (cs.CostStage = ref.CostStage
+               OR (cs.CostStage IS NULL AND ref.CostStage IS NULL))
+    """
+
+    cost_set_key = _scalar(db_connection, cost_set_lookup, (batch_id,))
     assert cost_set_key is not None
+    assert _count(db_connection, natural_key_rows, (cost_set_key,)) == 1
 
     staged_l2_codes = _count(
         db_connection,
@@ -196,10 +208,12 @@ def test_commit_populates_warehouse_dims_and_facts(db_connection):
     assert summary_row[0] == staged_total
     assert summary_row[1] is not None
 
-    # Re-committing the same cost set replaces facts rather than duplicating them.
+    # Re-committing upserts the same DimCostSet row and replaces its facts.
     cur = db_connection.cursor()
     cur.execute("EXEC stg.usp_CommitBatch ?", (batch_id,))
     db_connection.commit()
+    assert _scalar(db_connection, cost_set_lookup, (batch_id,)) == cost_set_key
+    assert _count(db_connection, natural_key_rows, (cost_set_key,)) == 1
     assert (
         _count(
             db_connection,

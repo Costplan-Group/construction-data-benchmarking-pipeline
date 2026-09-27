@@ -5,6 +5,9 @@
   or after warehouse DDL has been applied).
 
   These views do NOT read staging (stg.*).
+
+  DimCostSet has one row per (ProjectID, ContractorKey, CostStage); re-ingesting upserts that
+  row in place, so every row is current and no IsCurrent/DataStatus filtering is needed.
 */
 
 -- Drop legacy staging-era tender view if present
@@ -33,10 +36,8 @@ SELECT
     cs.CostSetKey,
     cs.GIFA,
     cs.CostStage,
-    cs.DataStatus,
     cs.BaseDate,
     cs.Currency,
-    cs.IsCurrent AS CostSetIsCurrent,
     c.ContractorKey,
     c.ContractorName AS SelectedContractorName,
     p.CreatedAt AS ProjectCreatedAt,
@@ -48,7 +49,6 @@ LEFT JOIN dbo.DimLocation AS loc
     ON loc.LocationKey = p.LocationKey
 LEFT JOIN dbo.DimCostSet AS cs
     ON cs.ProjectKey = p.ProjectKey
-   AND cs.IsCurrent = 1
 LEFT JOIN dbo.DimContractor AS c
     ON c.ContractorKey = cs.ContractorKey;
 GO
@@ -65,7 +65,7 @@ SELECT
     cs.ProjectKey,
     p.ProjectID,
     p.ProjectName,
-    cs.IsCurrent AS CostSetIsCurrent,
+    cs.CostStage,
     cs.GIFA,
     e.L1Code,
     e.L1Name,
@@ -99,7 +99,7 @@ SELECT
     cs.ProjectKey,
     p.ProjectID,
     p.ProjectName,
-    cs.IsCurrent AS CostSetIsCurrent,
+    cs.CostStage,
     adj.AdjCategory,
     adj.AdjSubType,
     f.Amount,
@@ -127,7 +127,6 @@ SELECT
     cs.ProjectKey,
     p.ProjectID,
     p.ProjectName,
-    cs.IsCurrent AS CostSetIsCurrent,
     cs.GIFA,
     cs.CostStage,
     cs.Currency,
