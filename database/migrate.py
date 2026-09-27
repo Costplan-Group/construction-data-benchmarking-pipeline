@@ -98,7 +98,7 @@ def _sqlcmd_base(server: str, user: str, password: str) -> list[str]:
     import shutil
 
     if shutil.which("sqlcmd"):
-        return ["sqlcmd", "-S", server, "-U", user, "-P", password, "-C", "-b"]
+        return ["sqlcmd", "-S", server, "-U", user, "-P", password, "-C", "-b", "-I"]
 
     # Fallback: sqlcmd inside the compose SQL container.
     if shutil.which("docker"):
@@ -116,6 +116,7 @@ def _sqlcmd_base(server: str, user: str, password: str) -> list[str]:
             password,
             "-C",
             "-b",
+            "-I",
         ]
 
     raise RuntimeError(
