@@ -26,7 +26,7 @@ TECHNICAL_KEY_COLUMN_PATTERN = re.compile(r"key$", re.IGNORECASE)
 
 # Fallback schema if INFORMATION_SCHEMA introspection is unavailable.
 WAREHOUSE_SCHEMA_FALLBACK: list[str] = [
-    "- dbo.DimProject (ProjectKey, ProjectID, ProjectName, ClientName, LocationKey, SectorKey, CreatedAt, UpdatedAt)",
+    "- dbo.DimProject (ProjectKey, ProjectID, ProjectName, ClientName, LocationKey, SectorKey, SpecLevel, SiteType, NrOfStoreys, TotalHeightGroundToRoof, BasementArea, BasementHeight, ComplexityRating, AccessConstraints, Occupied, CreatedAt, UpdatedAt)",
     "- dbo.DimCostSet (CostSetKey, ProjectKey, ProjectID, ContractorKey, CostStage, SourceCostSetIdentifier, BaseDate, Currency, GIFA, SourceFile, UploadedAt, ...)",
     "- dbo.DimSector (SectorKey, SectorCode, SectorName, SortOrder, IsActive)",
     "- dbo.DimLocation (LocationKey, Country, Region, CountryCode, DisplayLabel, IsActive)",

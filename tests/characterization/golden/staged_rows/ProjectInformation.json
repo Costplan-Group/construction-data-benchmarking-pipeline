@@ -1,10 +1,14 @@
 [
   {
+    "AccessConstraints": "Restricted - live campus",
     "Asbestos": 0,
     "BaseDate": "2025-06-01",
     "Basement": 0,
+    "BasementArea": "0",
+    "BasementHeight": "0",
     "BudgetStage": "Pre-Contract",
     "ClientName": "Northbridge Education Trust",
+    "ComplexityRating": "Medium",
     "Contamination": 0,
     "CostStage": "Tender",
     "Currency": "GBP",
@@ -16,6 +20,8 @@
     "LocationLabel": "North West",
     "NewBuild": 1,
     "Notes": "Fictional sample project for ingestion tests and Stage B demo. SUMMARY first metric pair is Costplan; variance = tender \u2212 Costplan.",
+    "NrOfStoreys": 3,
+    "Occupied": 1,
     "ProgrammeLengthInWeeks": 78,
     "ProgrammeType": "Traditional",
     "ProjectID": "DEMO-001",
@@ -24,7 +30,10 @@
     "RowNum": 2,
     "SectorCode": "Education",
     "SelectedContractor": "Apex Build Ltd",
+    "SiteType": "Brownfield",
     "SourceFileName": "DEMO_Tender_Comparison_Workbook.xlsx",
+    "SpecLevel": "Medium",
+    "TotalHeightGroundToRoof": "13.5",
     "VerticalExtension": 0
   }
 ]

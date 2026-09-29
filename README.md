@@ -458,7 +458,7 @@ Power BI connects to **committed warehouse** data (`dbo.Dim*` / `dbo.Fact*`) via
 ### 1) Create / refresh reporting views
 
 Warehouse tables are created by migration `007_warehouse_tables.sql` and loaded by
-`stg.usp_CommitBatch` (`010`): `DimProject`, `DimCostSet`, `DimContractor`, `DimElementL2`,
+`stg.usp_CommitBatch` (`012`): `DimProject`, `DimCostSet`, `DimContractor`, `DimElementL2`,
 `DimAdjustmentType`, `FactProjectQuant`, `FactElementCostL2`, `FactCostAdjustment`,
 `FactCostSetSummary`. The views also expect `DimLocation.DisplayLabel/Country/Region`, which
 the migration schema does not create; add that table first on a fresh database.

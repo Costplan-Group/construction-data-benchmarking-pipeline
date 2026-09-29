@@ -55,6 +55,11 @@ class ProjectInformationStager(SheetStager):
             mapped["Basement"] = to_bit(row.get("Basement"))
             mapped["Asbestos"] = to_bit(row.get("Asbestos"))
             mapped["Contamination"] = to_bit(row.get("Contamination"))
+            mapped["Occupied"] = to_bit(row.get("Occupied"))
+            mapped["NrOfStoreys"] = to_int(row.get("NrOfStoreys"))
+            mapped["TotalHeightGroundToRoof"] = to_decimal(row.get("TotalHeightGroundToRoof"))
+            mapped["BasementArea"] = to_decimal(row.get("BasementArea"))
+            mapped["BasementHeight"] = to_decimal(row.get("BasementHeight"))
             mapped["ProgrammeLengthInWeeks"] = to_int(row.get("ProgrammeLengthInWeeks"))
             mapped["GIFA"] = to_decimal(row.get("GIFA"))
             if mapped["GIFA"] is None and fallback_gifa is not None:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
@@ -193,6 +194,33 @@ def test_commit_populates_warehouse_dims_and_facts(db_connection):
     )
     if has_selected:
         assert contractor_key is not None
+
+    project = db_connection.cursor()
+    project.execute(
+        """
+        SELECT dp.SpecLevel, dp.SiteType, dp.NrOfStoreys, dp.TotalHeightGroundToRoof,
+               dp.BasementArea, dp.BasementHeight, dp.ComplexityRating,
+               dp.AccessConstraints, dp.Occupied
+        FROM dbo.DimProject dp
+        INNER JOIN stg.ProjectInformation pi
+            ON pi.ProjectID = dp.ProjectID
+        WHERE pi.LoadBatchID = ?
+        """,
+        (batch_id,),
+    )
+    project_row = project.fetchone()
+    assert project_row is not None
+    assert tuple(project_row) == (
+        "Medium",
+        "Brownfield",
+        3,
+        Decimal("13.50"),
+        Decimal("0.00"),
+        Decimal("0.00"),
+        "Medium",
+        "Restricted - live campus",
+        True,
+    )
 
     summary = db_connection.cursor()
     summary.execute(
