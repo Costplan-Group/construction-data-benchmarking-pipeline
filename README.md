@@ -458,7 +458,7 @@ Power BI connects to **committed warehouse** data (`dbo.Dim*` / `dbo.Fact*`) via
 ### 1) Create / refresh reporting views
 
 Warehouse tables are created by migration `007_warehouse_tables.sql` and loaded by
-`stg.usp_CommitBatch` (`012`): `DimProject`, `DimCostSet`, `DimContractor`, `DimElementL2`,
+`stg.usp_CommitBatch` (`014`): `DimProject`, `DimCostSet`, `DimContractor`, `DimElementL2`,
 `DimAdjustmentType`, `FactProjectQuant`, `FactElementCostL2`, `FactCostAdjustment`,
 `FactCostSetSummary`. The views also expect `DimLocation.DisplayLabel/Country/Region`, which
 the migration schema does not create; add that table first on a fresh database.
@@ -467,6 +467,19 @@ the migration schema does not create; add that table first on a fresh database.
 (`UQ_DimCostSet_Project_Contractor_Stage`, migration `009`). Re-ingesting the same project,
 contractor and stage updates that row in place and keeps its `CostSetKey`; its facts are
 deleted and reloaded. There is no `IsCurrent`/`DataStatus` flag: every row is current.
+
+`DimProject` holds all site attributes (migrations `011`/`013`). Ingestion validates them
+before staging; a blank cell is allowed, anything else outside the domain fails the batch:
+
+| Attribute | Domain |
+|-----------|--------|
+| `SpecLevel` | `Low`, `Medium`, `High` (case-insensitive in the workbook, stored canonically) |
+| `SiteType` | `Greenfield`, `Brownfield` |
+| `ComplexityRating` | whole number 1-5 |
+| `NrOfStoreys` | non-negative whole number |
+| `TotalHeightGroundToRoof`, `BasementArea`, `BasementHeight` | non-negative number |
+| `AccessConstraints` | free text |
+| `Occupied` and site flags (`Demolition`, `NewBuild`, `Refurbishment`, `HorizontalExtension`, `VerticalExtension`, `Basement`, `Asbestos`, `Contamination`) | Yes/No (BIT) |
 
 After Dim/Fact tables exist (e.g. after a successful commit):
 

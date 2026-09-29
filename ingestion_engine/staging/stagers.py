@@ -8,6 +8,7 @@ import pandas as pd
 
 from ingestion_engine.coercion import clean_value, to_bit, to_decimal, to_int
 from ingestion_engine.contractor import get_selected_contractor
+from ingestion_engine.project_attributes import CHOICE_FIELDS, canonical_choice, is_blank
 from ingestion_engine.row_utils import infer_l3_row_type
 from ingestion_engine.schema import COLUMN_MAPS, STAGING_TABLES
 from ingestion_engine.staging.base import SheetStager
@@ -16,6 +17,17 @@ from ingestion_engine.workbook.aliases import source_sheet_name
 from ingestion_engine.workbook.normalizers.project_information import (
     extract_tenderers_from_project_information_df,
 )
+
+
+def _staged_choice(field: str, value, allowed: tuple[str, ...]) -> str | None:
+    if is_blank(value):
+        return None
+    canonical = canonical_choice(value, allowed)
+    if canonical is None:
+        raise ValueError(
+            f"Unvalidated {field} value {value!r} reached staging; allowed: {', '.join(allowed)}"
+        )
+    return canonical
 
 
 class ProjectInformationStager(SheetStager):
@@ -55,6 +67,9 @@ class ProjectInformationStager(SheetStager):
             mapped["Basement"] = to_bit(row.get("Basement"))
             mapped["Asbestos"] = to_bit(row.get("Asbestos"))
             mapped["Contamination"] = to_bit(row.get("Contamination"))
+            for field, allowed in CHOICE_FIELDS.items():
+                mapped[field] = _staged_choice(field, row.get(field), allowed)
+            mapped["ComplexityRating"] = to_int(row.get("ComplexityRating"))
             mapped["Occupied"] = to_bit(row.get("Occupied"))
             mapped["NrOfStoreys"] = to_int(row.get("NrOfStoreys"))
             mapped["TotalHeightGroundToRoof"] = to_decimal(row.get("TotalHeightGroundToRoof"))

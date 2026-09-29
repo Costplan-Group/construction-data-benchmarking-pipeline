@@ -200,7 +200,9 @@ def test_commit_populates_warehouse_dims_and_facts(db_connection):
         """
         SELECT dp.SpecLevel, dp.SiteType, dp.NrOfStoreys, dp.TotalHeightGroundToRoof,
                dp.BasementArea, dp.BasementHeight, dp.ComplexityRating,
-               dp.AccessConstraints, dp.Occupied
+               dp.AccessConstraints, dp.Occupied,
+               dp.Demolition, dp.NewBuild, dp.Refurbishment, dp.HorizontalExtension,
+               dp.VerticalExtension, dp.Basement, dp.Asbestos, dp.Contamination
         FROM dbo.DimProject dp
         INNER JOIN stg.ProjectInformation pi
             ON pi.ProjectID = dp.ProjectID
@@ -210,17 +212,43 @@ def test_commit_populates_warehouse_dims_and_facts(db_connection):
     )
     project_row = project.fetchone()
     assert project_row is not None
-    assert tuple(project_row) == (
+    assert tuple(project_row[:9]) == (
         "Medium",
         "Brownfield",
         3,
-        Decimal("13.50"),
-        Decimal("0.00"),
-        Decimal("0.00"),
-        "Medium",
+        Decimal("13.5000"),
+        Decimal("0.0000"),
+        Decimal("0.0000"),
+        3,
         "Restricted - live campus",
         True,
     )
+    site_flags = dict(
+        zip(
+            (
+                "Demolition",
+                "NewBuild",
+                "Refurbishment",
+                "HorizontalExtension",
+                "VerticalExtension",
+                "Basement",
+                "Asbestos",
+                "Contamination",
+            ),
+            project_row[9:],
+            strict=True,
+        )
+    )
+    assert site_flags == {
+        "Demolition": False,
+        "NewBuild": True,
+        "Refurbishment": False,
+        "HorizontalExtension": True,
+        "VerticalExtension": False,
+        "Basement": False,
+        "Asbestos": False,
+        "Contamination": False,
+    }
 
     summary = db_connection.cursor()
     summary.execute(

@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 import pandas as pd
 
+from ingestion_engine import project_attributes
 from ingestion_engine.coercion import clean_value, to_decimal
 from ingestion_engine.schema import REQUIRED_COLUMNS
 from ingestion_engine.workbook.aliases import source_sheet_name
@@ -202,9 +203,57 @@ class RowLevelValidator(WorkbookValidator):
         report.ran_validators.append("RowLevelValidator")
 
 
+class ProjectAttributeValidator(WorkbookValidator):
+    """Domain checks for the DimProject attributes on the ProjectInformation row.
+
+    Blank values (missing label, empty cell) are allowed; a non-blank value outside
+    the allowed list or range is an error. 0 is a value, not a blank.
+    """
+
+    def validate(
+        self,
+        load_batch_id: str,
+        dataframes: dict[str, pd.DataFrame],
+        *,
+        error_repo: ValidationErrorRepository,
+        report: ValidationReport,
+    ) -> None:
+        pi_df = dataframes.get("ProjectInformation")
+        if pi_df is None or pi_df.empty:
+            report.ran_validators.append("ProjectAttributeValidator")
+            return
+
+        resolved_sheets = dataframes.get("_resolved_sheets") or {}
+        pi_sheet = resolved_sheets.get("ProjectInformation") or source_sheet_name(
+            pi_df, "ProjectInformation"
+        )
+        row = pi_df.iloc[0]
+
+        for field in project_attributes.VALIDATED_FIELDS:
+            if field not in pi_df.columns:
+                continue
+            raw = row.get(field)
+            error = project_attributes.attribute_error(field, raw)
+            if error is None:
+                continue
+            error_type, message = error
+            error_repo.log(
+                load_batch_id,
+                pi_sheet,
+                column_name=field,
+                error_type=error_type,
+                error_message=message,
+                row_data={field: clean_value(raw)},
+                use_row_data_column=True,
+            )
+
+        report.ran_validators.append("ProjectAttributeValidator")
+
+
 _DEFAULT_VALIDATORS: list[WorkbookValidator] = [
     RequiredColumnsValidator(),
     RowLevelValidator(),
+    ProjectAttributeValidator(),
 ]
 
 

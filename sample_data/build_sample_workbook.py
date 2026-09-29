@@ -91,7 +91,7 @@ def _write_project_information(wb: Workbook) -> None:
         ("Total Height Ground To Roof", 13.5),
         ("Basement Area", 0),
         ("Basement Height", 0),
-        ("Complexity Rating", "Medium"),
+        ("Complexity Rating", 3),
         ("Access Constraints", "Restricted - live campus"),
         ("Occupied?", "Yes"),
         ("Base Date", "2025-06-01"),

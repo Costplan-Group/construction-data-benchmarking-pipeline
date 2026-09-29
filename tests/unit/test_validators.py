@@ -100,7 +100,11 @@ def test_row_level_pi_count_invalid_number_and_rowtype():
 def test_validate_workbook_data_orchestrator_and_log_fn_adapter():
     frames = _minimal_ok_frames()
     report = validate_workbook_data("batch-1", frames, error_repo=FakeErrorRepo())
-    assert report.ran_validators == ["RequiredColumnsValidator", "RowLevelValidator"]
+    assert report.ran_validators == [
+        "RequiredColumnsValidator",
+        "RowLevelValidator",
+        "ProjectAttributeValidator",
+    ]
 
     logged: list[tuple] = []
 
