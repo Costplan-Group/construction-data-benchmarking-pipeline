@@ -4,11 +4,12 @@ POC scaffold for a React frontend, FastAPI backend, Excel ingestion engine, and 
 
 ## Overview
 
-This repository is structured so the backend API can be built first, with the frontend added on top once the ingestion and batch-reporting endpoints are stable.
+The backend (FastAPI + ingestion engine) owns ingestion, validation, the SQL Server warehouse and the AI features; the React frontend has pages for ingestion, AI report generation and the AI QS assistant.
 
 Current backend capabilities:
 
 - upload an Excel workbook for ingestion
+- detect a repeat upload of the same workbook (SHA-256 content hash) and link it to the existing batch instead of re-ingesting
 - create and track a load batch
 - return batch summary and validation errors
 - download validation errors as CSV
@@ -86,7 +87,7 @@ python database/migrate.py
 python database/migrate.py --status
 ```
 
-`database/migrations/` is the only source of truth for tables and procedures; never edit an applied migration (the checksum will drift) — add a new one instead, e.g. `009_my_change.sql`. Prefer `IF NOT EXISTS` / `CREATE OR ALTER` so scripts stay re-runnable. Reporting views and AI/PBI security scripts stay separate (password parameters) and are not auto-migrated.
+`database/migrations/` is the only source of truth for tables and procedures; never edit an applied migration (the checksum will drift) — add a new one instead, e.g. `015_my_change.sql`. Prefer `IF NOT EXISTS` / `CREATE OR ALTER` so scripts stay re-runnable. Reporting views and AI/PBI security scripts stay separate (password parameters) and are not auto-migrated.
 
 Stop / reset:
 
@@ -126,7 +127,7 @@ pre-commit install
 Hooks on every commit:
 
 - **ruff** / **ruff-format** — lint and format Python
-- **mypy** — type-check `backend` (stricter on newer modules)
+- **mypy** — strict type-check of the backend modules listed in `[tool.mypy] files` (gradual adoption; expand the list over time)
 - **gitleaks** — block secrets from being committed
 
 Useful commands:
@@ -155,8 +156,8 @@ Config: `.pre-commit-config.yaml`, `.gitleaks.toml`, and `[tool.ruff]` / `[tool.
 `.github/workflows/ci.yml` runs on pushes to `main`, on pull requests, and manually (`workflow_dispatch`). It has three parallel jobs:
 
 - **Lint & type-check** — `ruff check`, `ruff format --check`, `mypy`
-- **Tests (with SQL Server)** — starts a `mssql/server:2022` service container, installs ODBC Driver 18 + `sqlcmd`, applies migrations with `python database/migrate.py`, then runs unit/characterization tests (with coverage on `ingestion_engine`) and the integration tests
-- **Frontend build** — `npm ci && npm run build` in `frontend/`
+- **Tests (with SQL Server)** — starts a `mssql/server:2022-latest` service container, installs ODBC Driver 18 + `sqlcmd`, applies migrations with `python database/migrate.py`, then runs unit/characterization tests (with coverage on `ingestion_engine`) and the integration tests
+- **Frontend lint, test, and build** — `npm ci`, `npm run lint` (ESLint), `npm test` (Vitest), `npm run build` in `frontend/`
 
 In CI the integration tests run with `SQL_SCHEMA_APPLIED=1` (skip the in-test schema apply) and `SQL_INTEGRATION_STRICT=1` (fail instead of skip if SQL Server is unreachable). The SA password in the workflow is a throwaway for the ephemeral container, not a real credential.
 
@@ -173,6 +174,13 @@ npm run dev
 Open in browser:
 
 - `http://127.0.0.1:5173`
+
+Lint and test:
+
+```powershell
+npm run lint
+npm test
+```
 
 Notes:
 
@@ -238,6 +246,7 @@ AI_SQL_PASSWORD=your_ai_readonly_password
 AI_SQL_SERVER=YOUR_SERVER\INSTANCE
 AI_SQL_DATABASE=YOUR_DATABASE
 # Optional overrides:
+# AI_SQL_DRIVER=ODBC Driver 17 for SQL Server
 # AI_SQL_MAX_ROWS=500
 # AI_SQL_QUERY_TIMEOUT_S=30
 ```
@@ -346,6 +355,8 @@ Optional fallback request body:
 }
 ```
 
+Set `"regenerate_fresh": true` to ignore a previously saved draft and generate a new one.
+
 Example response shape:
 
 ```json
@@ -353,6 +364,11 @@ Example response shape:
   "project_id": "P2402",
   "load_batch_id": "8d5f3dcb-2f4f-4e22-9d30-123456789abc",
   "source_file_name": "P2402_benchmark.xlsx",
+  "saved_draft_loaded": false,
+  "saved_at_utc": null,
+  "draft_sections": {
+    "...": "..."
+  },
   "report_context": {
     "project": {
       "project_id": "P2402"
@@ -370,6 +386,7 @@ Saved report drafts and generated Word/PDF exports are written under the configu
 
 Current backend endpoints:
 
+- `GET /api/health`
 - `POST /api/ingestion/upload`
 - `GET /api/batches/{load_batch_id}/summary`
 - `GET /api/batches/{load_batch_id}/error-counts`
@@ -392,11 +409,12 @@ Recommended smoke-test flow:
 4. Copy the returned `load_batch_id`.
 5. Use that `load_batch_id` in the batch endpoints.
 
-Example PowerShell upload:
+Example PowerShell upload (upload and `/api/ai/*` need the `X-API-Key` header; in Swagger fill the `X-API-Key` field on those endpoints):
 
 ```powershell
 curl -X POST "http://127.0.0.1:8001/api/ingestion/upload" `
   -H "accept: application/json" `
+  -H "X-API-Key: change-me-local-api-key" `
   -H "Content-Type: multipart/form-data" `
   -F "file=@C:/path/to/your/test.xlsx"
 ```
@@ -408,9 +426,14 @@ Expected upload response shape:
   "load_batch_id": "8d5f3dcb-2f4f-4e22-9d30-123456789abc",
   "status": "COMMITTED",
   "error_count": 0,
-  "source_file_name": "test.xlsx"
+  "source_file_name": "test.xlsx",
+  "exception": null,
+  "content_hash": "3f2a…(64 hex chars)",
+  "duplicate": false
 }
 ```
+
+Uploading a byte-identical workbook again returns `"duplicate": true` with the original `load_batch_id` and status; nothing is re-staged or re-committed.
 
 Then query the batch:
 
@@ -426,6 +449,7 @@ AI query example:
 
 ```powershell
 curl -X POST "http://127.0.0.1:8001/api/ai/query" `
+  -H "X-API-Key: change-me-local-api-key" `
   -H "Content-Type: application/json" `
   -d "{\"question\":\"Show top 10 Level2 elements by total cost\"}"
 ```
@@ -434,6 +458,7 @@ AI report draft example:
 
 ```powershell
 curl -X POST "http://127.0.0.1:8001/api/ai/report-draft" `
+  -H "X-API-Key: change-me-local-api-key" `
   -H "Content-Type: application/json" `
   -d "{\"project_id\":\"P2402\"}"
 ```
@@ -447,7 +472,7 @@ curl -X POST "http://127.0.0.1:8001/api/ai/report-draft" `
 - `error-rows` includes `RowData` for row-level troubleshooting and mapped SUMMARY cell references when available.
 - AI query endpoint uses parsed SQL, a Dim/Fact warehouse allowlist, a row cap, and a dedicated read-only login (see AI assistant security model).
 - Excel ingestion is implemented under `ingestion_engine/` (`workbook/`, `validation/`, `staging/`, `pipeline.py`). `excel_file_ingestion.py` is a thin compatibility façade; CLI: `python -m benchmarking.ingest path/to/file.xlsx`.
-- The frontend scaffold is present but backend-first development is the current focus.
+- The frontend (`frontend/src/pages/`) has three pages: Ingestion, AI Report Generation and AI QS Assistant.
 
 ## Power BI reporting (Fact / Dim)
 
@@ -460,8 +485,8 @@ Power BI connects to **committed warehouse** data (`dbo.Dim*` / `dbo.Fact*`) via
 Warehouse tables are created by migration `007_warehouse_tables.sql` and loaded by
 `stg.usp_CommitBatch` (`014`): `DimProject`, `DimCostSet`, `DimContractor`, `DimElementL2`,
 `DimAdjustmentType`, `FactProjectQuant`, `FactElementCostL2`, `FactCostAdjustment`,
-`FactCostSetSummary`. The views also expect `DimLocation.DisplayLabel/Country/Region`, which
-the migration schema does not create; add that table first on a fresh database.
+`FactCostSetSummary`. `DimLocation` (`LocationKey`, `LocationLabel`) and `DimSector` are
+created and seeded by migrations `004`/`005`, so the views need nothing beyond the migrations.
 
 `DimCostSet` has exactly one row per `(ProjectID, ContractorKey, CostStage)`
 (`UQ_DimCostSet_Project_Contractor_Stage`, migration `009`). Re-ingesting the same project,
@@ -505,6 +530,10 @@ sqlcmd -S YOUR_SERVER\INSTANCE -d YOUR_DATABASE -E -i database/security/002_pbi_
 Grants `SELECT` on all `dbo.Dim*` / `dbo.Fact*` tables and on `dbo.vw_BI_*` views.
 Does **not** grant `stg.*`. Use a different password from `ai_readonly`.
 
+Grants cover only objects that exist when the script runs: create the views first, and re-run
+this script after adding new Dim/Fact tables or `vw_BI_*` views (the same applies to
+`001_ai_readonly_login.sql`).
+
 ### 3) Connect Power BI Desktop
 
 1. Get data → **SQL Server**.
@@ -537,12 +566,15 @@ cost-benchmarking-poc/
 ├── frontend/
 │   ├── Dockerfile
 │   ├── nginx.conf
+│   ├── eslint.config.js
 │   ├── src/
 │   │   ├── api/
 │   │   ├── components/
 │   │   ├── pages/
 │   │   ├── hooks/
 │   │   ├── types/
+│   │   ├── utils/
+│   │   ├── test/
 │   │   ├── App.tsx
 │   │   └── main.tsx
 │   └── package.json
@@ -552,24 +584,29 @@ cost-benchmarking-poc/
 │   ├── app/
 │   │   ├── main.py
 │   │   ├── api/
+│   │   ├── core/
 │   │   ├── services/
 │   │   ├── repositories/
+│   │   ├── reporting/
 │   │   └── schemas/
 ├── ingestion_engine/
 │   ├── config.py
 │   ├── pipeline.py
+│   ├── project_attributes.py
 │   ├── workbook/
 │   ├── validation/
 │   ├── staging/
 │   └── excel_file_ingestion.py
+├── sample_data/
+│   └── build_sample_workbook.py
 ├── benchmarking/
 │   └── ingest.py
 ├── database/
 │   ├── migrate.py
 │   ├── migrations/      # source of truth for schema + procedures (applied by migrate.py)
 │   ├── schema/          # 002_reporting_views.sql only (manual, not migrated)
-│   ├── security/
-│   └── docker/
+│   ├── security/        # AI / Power BI read-only logins (manual, password at run time)
+│   └── docker/          # db-init + apply_schema wrappers around migrate.py
 ├── tests/
 │   ├── unit/
 │   ├── characterization/

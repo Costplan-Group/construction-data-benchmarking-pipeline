@@ -29,7 +29,7 @@ WAREHOUSE_SCHEMA_FALLBACK: list[str] = [
     "- dbo.DimProject (ProjectKey, ProjectID, ProjectName, ClientName, LocationKey, SectorKey, SpecLevel, SiteType, NrOfStoreys, TotalHeightGroundToRoof, BasementArea, BasementHeight, ComplexityRating, AccessConstraints, Occupied, Demolition, NewBuild, Refurbishment, HorizontalExtension, VerticalExtension, Basement, Asbestos, Contamination, CreatedAt, UpdatedAt)",
     "- dbo.DimCostSet (CostSetKey, ProjectKey, ProjectID, ContractorKey, CostStage, SourceCostSetIdentifier, BaseDate, Currency, GIFA, SourceFile, UploadedAt, ...)",
     "- dbo.DimSector (SectorKey, SectorCode, SectorName, SortOrder, IsActive)",
-    "- dbo.DimLocation (LocationKey, Country, Region, CountryCode, DisplayLabel, IsActive)",
+    "- dbo.DimLocation (LocationKey, LocationLabel)",
     "- dbo.DimContractor (ContractorKey, ContractorName, IsActive)",
     "- dbo.DimElementL2 (ElementL2Key, ElementSystemKey, L1Code, L1Name, L2Code, L2Name, SortOrder, IsActive)",
     "- dbo.DimAdjustmentType (AdjustmentTypeKey, AdjCategory, AdjSubType)",
